@@ -1,5 +1,13 @@
 2020-05-14  Anuj Verma  <anujv@iitbhilai.ac.in>
 
+	[sdf-outline] Added more structures and helper functions
+
+	* sdfgen.h (SDF_Shape): Added new structure.
+	* sdfgen.c: Added functions for initializing and deleting
+	  the SDF_ structures.
+
+2020-05-14  Anuj Verma  <anujv@iitbhilai.ac.in>
+
 	[sdf-outline] Added a few essintial private structures
 
 	* sdfgen.h (SDF_Vector, SDF_Contour): Added new structures.
