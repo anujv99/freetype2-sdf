@@ -1,0 +1,6 @@
+2020-05-14  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] Added a few essintial private structures
+
+	* sdfgen.h (SDF_Vector, SDF_Contour): Added new structures.
+	* sdfgen.h (SDF_Contour_Type): Added new enumeration.
