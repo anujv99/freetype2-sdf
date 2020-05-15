@@ -1,4 +1,9 @@
 2020-05-15  Anuj Verma  <anujv@iitbhilai.ac.in>
+	
+	* sdfgen.c: Fixed indentations and spacing to match
+	  FreeType's code style.
+
+2020-05-15  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] Added function to decompose outline.
 

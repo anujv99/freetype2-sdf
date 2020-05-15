@@ -13,7 +13,9 @@
   static SDF_Vector
   FT_To_SDF_Vec( FT_Vector  vec )
   {
-    SDF_Vector out_vec;
+    SDF_Vector  out_vec;
+
+
     out_vec.x = FT_26DOT6_TO_FLOAT( vec.x );
     out_vec.y = FT_26DOT6_TO_FLOAT( vec.y );
     return out_vec;
@@ -24,8 +26,8 @@
                    FT_Outline*  outline,
                    FT_Bitmap   *abitmap )
   {
-    SDF_Shape shape;
-    FT_Error error = FT_Err_Ok;
+    SDF_Shape  shape;
+    FT_Error   error = FT_Err_Ok;
 
 
     if ( !library )
@@ -84,8 +86,8 @@
   FT_LOCAL_DEF( FT_Error )
   SDF_Shape_Done( SDF_Shape  *shape )
   {
-    FT_Memory memory;
-
+    FT_Memory     memory;
+    SDF_Contour*  head;
 
     if ( !shape )
       return FT_THROW( Invalid_Argument );
@@ -94,14 +96,14 @@
       return FT_THROW( Invalid_Library_Handle );
 
     memory = shape->memory;
-    
-    SDF_Contour * head = shape->contour_head;
+    head = shape->contour_head;
 
     while ( head )
     {
-      SDF_Contour * temp = head;
-      head = head->next;
+      SDF_Contour*  temp = head;
 
+
+      head = head->next;
       FT_MEM_FREE( temp );
     }
 
@@ -116,8 +118,8 @@
   sdf_outline_move_to( const FT_Vector*  to,
                        void*             user )
   {
-    SDF_Shape* shape = ( SDF_Shape* )user;
-    FT_Error error = FT_Err_Ok;
+    SDF_Shape*  shape = ( SDF_Shape* )user;
+    FT_Error    error = FT_Err_Ok;
 
 
     shape->current_pos = FT_To_SDF_Vec( *to );
@@ -128,18 +130,18 @@
   sdf_outline_line_to( const FT_Vector*  to,
                        void*             user )
   {
-    SDF_Shape* shape     = ( SDF_Shape* )user;
-    SDF_Vector endpoint  = FT_To_SDF_Vec( *to );
+    SDF_Shape*    shape     = ( SDF_Shape* )user;
+    SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
+    SDF_Contour*  contour   = NULL;
 
-    FT_Memory memory     = shape->memory;
-    FT_Error error       = FT_Err_Ok;
+    FT_Memory   memory      = shape->memory;
+    FT_Error    error       = FT_Err_Ok;
 
 
     if ( endpoint.x != shape->current_pos.x ||
          endpoint.y != shape->current_pos.y )
     {
       /* only add contour if current_pos != to */
-      SDF_Contour * contour;
       FT_MEM_QNEW( contour );
       if (error != FT_Err_Ok)
         return error;
@@ -166,16 +168,16 @@
                         const FT_Vector*  to,
                         void*             user )
   {
-    SDF_Shape* shape     = ( SDF_Shape* )user;
-    SDF_Vector endpoint  = FT_To_SDF_Vec( *to );
-    SDF_Vector control   = FT_To_SDF_Vec( *control1 );
+    SDF_Shape*    shape     = ( SDF_Shape* )user;
+    SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
+    SDF_Vector    control   = FT_To_SDF_Vec( *control1 );
+    SDF_Contour*  contour   = NULL;
 
-    FT_Memory memory     = shape->memory;
-    FT_Error error       = FT_Err_Ok;
+    FT_Memory     memory    = shape->memory;
+    FT_Error      error     = FT_Err_Ok;
 
 
     /* in conic bezier, to and current_pos can be same */
-    SDF_Contour * contour;
     FT_MEM_QNEW( contour );
     if (error != FT_Err_Ok)
         return error;
@@ -203,17 +205,18 @@
                         const FT_Vector*  to,
                         void*             user )
   {
-    SDF_Shape* shape       = ( SDF_Shape* )user;
-    SDF_Vector endpoint    = FT_To_SDF_Vec( *to );
-    SDF_Vector control_a   = FT_To_SDF_Vec( *control1 );
-    SDF_Vector control_b   = FT_To_SDF_Vec( *control2 );
+    SDF_Shape*    shape      = ( SDF_Shape* )user;
+    SDF_Vector    endpoint   = FT_To_SDF_Vec( *to );
+    SDF_Vector    control_a  = FT_To_SDF_Vec( *control1 );
+    SDF_Vector    control_b  = FT_To_SDF_Vec( *control2 );
+    SDF_Contour*  contour    = NULL;
 
-    FT_Memory memory       = shape->memory;
-    FT_Error error         = FT_Err_Ok;
+    FT_Memory     memory     = shape->memory;
+    FT_Error      error      = FT_Err_Ok;
 
 
     /* in cubic bezier, to and current_pos can be same */
-    SDF_Contour * contour = NULL;
+    
     FT_MEM_QNEW( contour );
     if (error != FT_Err_Ok)
         return error;
