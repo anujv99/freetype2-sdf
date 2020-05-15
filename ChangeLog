@@ -1,6 +1,19 @@
+2020-05-15  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] Added function to decompose outline.
+
+	Reduced all lines to 78 characters.
+
+	* sdfgen.c, sdfgen.h (SDF_Decompose_Outline): Added function 
+	  which use `FT_Outline_Decompose' to decompose and store it 
+	  in `SDF_Shape' struct. This will make iterating through the
+	  outline easier.
+	* sdfgen.c: Started using `FT_THROW' macro instead of return
+	  `FT_Error'.
+
 2020-05-14  Anuj Verma  <anujv@iitbhilai.ac.in>
 
-	[sdf-outline] Added more structures and helper functions
+	[sdf-outline] Added more structures and helper functions.
 
 	* sdfgen.h (SDF_Shape): Added new structure.
 	* sdfgen.c: Added functions for initializing and deleting
@@ -8,7 +21,7 @@
 
 2020-05-14  Anuj Verma  <anujv@iitbhilai.ac.in>
 
-	[sdf-outline] Added a few essintial private structures
+	[sdf-outline] Added a few essintial private structures.
 
 	* sdfgen.h (SDF_Vector, SDF_Contour): Added new structures.
 	* sdfgen.h (SDF_Contour_Type): Added new enumeration.
