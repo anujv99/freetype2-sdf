@@ -36,12 +36,12 @@ FT_BEGIN_HEADER
   /* enumeration for the types of contour present in FT_Outline */
   typedef enum  SDF_Contour_Type_
   {
-    SDF_CONTOUR_TYPE_NONE,
-    SDF_CONTOUR_TYPE_LINE,              /* line type contour             */
-    SDF_CONTOUR_TYPE_QUADRATIC_BEZIER,  /* quadratic bezier type contour */
-    SDF_CONTOUR_TYPE_CUBIC_BEZIER,      /* cubic bezier type contour     */
+    SDF_CONTOUR_TYPE_NONE              = -1,
+    SDF_CONTOUR_TYPE_LINE              =  0,  /* line type             */
+    SDF_CONTOUR_TYPE_QUADRATIC_BEZIER  =  1,  /* quadratic bezier type */
+    SDF_CONTOUR_TYPE_CUBIC_BEZIER      =  2,  /* cubic bezier type     */
 
-    SDF_CONTOUR_TYPE_MAX
+    SDF_CONTOUR_TYPE_MAX               =  3
 
   } SDF_Contour_Type;
 
@@ -69,7 +69,7 @@ FT_BEGIN_HEADER
 
     FT_ULong      num_contours;  /* total number of contours        */
 
-    FT_Memory     memory;        /* to allocate memory              */
+    FT_Memory     memory;        /* to allocate/deallocate memory   */
 
   } SDF_Shape;
 
@@ -92,8 +92,60 @@ FT_BEGIN_HEADER
   SDF_Shape_Done( SDF_Shape  *shape );
 
   FT_LOCAL( FT_Error )
-  SDF_Decompose_Outline( FT_Outline* outline,
-                         SDF_Shape  *shape );
+  SDF_Decompose_Outline( FT_Outline*  outline,
+                         SDF_Shape   *shape );
+
+  /**************************************************************************
+   *
+   * Math functions
+   *
+   */
+
+  /* function to clamp the input value between min and max */
+  FT_LOCAL( float )
+  clamp( float   input,
+         float   min,
+         float   max );
+
+  /* returns the magnitude of a vector */
+  FT_LOCAL( float )
+  sdf_vector_length( SDF_Vector  vector );
+
+  /* returns the squared magnitude of a vector */
+  FT_LOCAL( float )
+  sdf_vector_squared_length( SDF_Vector  vector );
+
+  /* retruns component wise addition of `a' and `b' */
+  FT_LOCAL( SDF_Vector )
+  sdf_vector_add( SDF_Vector  a,
+                  SDF_Vector  b );
+
+  /* retruns component wise subtraction of `a' and `b' */
+  FT_LOCAL( SDF_Vector )
+  sdf_vector_sub( SDF_Vector  a,
+                  SDF_Vector  b );
+
+  /* retruns component wise multiplication by `scale' */
+  FT_LOCAL( SDF_Vector )
+  sdf_vector_scale( SDF_Vector  vector,
+                    float       scale );
+
+  FT_LOCAL( float )
+  sdf_vector_dot( SDF_Vector  a, 
+                  SDF_Vector  b );
+
+  /* returns a normalized vector ( i.e. vector length = 1.0f ) */
+  FT_LOCAL( SDF_Vector )
+  sdf_vector_normalize( SDF_Vector  vector );
+
+  /* function returns the minimum distance from a point to a contour.     */
+  /* the sign of the distance is determined by the side at which the      */
+  /* the point is of the contour. The side is determined by the cross     */
+  /* product of minimum distance vector and the direction of the contour  */
+  FT_LOCAL( FT_Error )
+  get_min_distance( SDF_Contour*       contour,
+                    const SDF_Vector   point,
+                    float             *min_distance );
 
 FT_END_HEADER
 

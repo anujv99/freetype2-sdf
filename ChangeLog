@@ -1,3 +1,15 @@
+2020-05-16  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] Added function to find the minimum distance 
+	from a point to a line (unsigned).
+
+	* sdfgen.c, sdfgen.h (get_min_distance): added function
+	  which determine the type of the contour and returns the
+	  minimum distance from a point to the contour. And 
+	  implemented minimum distance from a point to a line.
+	* sdfgen.c, sdfgen.h (sdf_vector_): added various functions
+	  for easily manipulating the `SDF_Vector'.
+
 2020-05-15  Anuj Verma  <anujv@iitbhilai.ac.in>
 	
 	* sdfgen.c: Fixed indentations and spacing to match
