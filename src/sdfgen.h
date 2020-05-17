@@ -125,23 +125,30 @@ FT_BEGIN_HEADER
   sdf_vector_sub( SDF_Vector  a,
                   SDF_Vector  b );
 
-  /* retruns component wise multiplication by `scale' */
+  /* returns component wise multiplication by `scale' */
   FT_LOCAL( SDF_Vector )
   sdf_vector_scale( SDF_Vector  vector,
                     float       scale );
 
+  /* dot/scalar product of two vector `a' and `b' */
   FT_LOCAL( float )
   sdf_vector_dot( SDF_Vector  a, 
                   SDF_Vector  b );
+
+  /* corss/vector product of two vector `a' and `b'. */
+  /* the cross product will be in the z-axis.        */
+  FT_LOCAL( float )
+  sdf_vector_cross( SDF_Vector  a,
+                    SDF_Vector  b );
 
   /* returns a normalized vector ( i.e. vector length = 1.0f ) */
   FT_LOCAL( SDF_Vector )
   sdf_vector_normalize( SDF_Vector  vector );
 
-  /* function returns the minimum distance from a point to a contour.     */
+  /* function returns the shortest distance from a point to a contour.    */
   /* the sign of the distance is determined by the side at which the      */
   /* the point is of the contour. The side is determined by the cross     */
-  /* product of minimum distance vector and the direction of the contour  */
+  /* product of shortest distance vector and the direction of the contour */
   FT_LOCAL( FT_Error )
   get_min_distance( SDF_Contour*       contour,
                     const SDF_Vector   point,

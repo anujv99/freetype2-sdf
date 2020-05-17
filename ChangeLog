@@ -1,12 +1,27 @@
+2020-05-17  Anuj Verma  <anujv@iitbhilai.ac.in>
+	
+	[sdf-outline] added functionality to return signed distance 
+	from a point to a line.
+
+	* sdfgen.c (get_min_distance): the function now return signed
+	  distance from a point to a line. The sign is positive if the
+	  point lie inside the outline and negative otherwise.
+	  also written a comment explaining the procedure to find the
+	  shortest distance from a point to a quadratic bezier curve.
+	* sdfgen.c, sdfgen.h (sdf_vector_): added few more
+	  functions for easily manipulating the `SDF_Vector'.
+	* sdfgen.c, sdfgen.h, ChangeLog: changed `minimum distance'
+	  to `shortest distance'.
+
 2020-05-16  Anuj Verma  <anujv@iitbhilai.ac.in>
 
-	[sdf-outline] Added function to find the minimum distance 
+	[sdf-outline] Added function to find the shortest distance 
 	from a point to a line (unsigned).
 
 	* sdfgen.c, sdfgen.h (get_min_distance): added function
 	  which determine the type of the contour and returns the
-	  minimum distance from a point to the contour. And 
-	  implemented minimum distance from a point to a line.
+	  shortest distance from a point to the contour. And 
+	  implemented shortest distance from a point to a line.
 	* sdfgen.c, sdfgen.h (sdf_vector_): added various functions
 	  for easily manipulating the `SDF_Vector'.
 
