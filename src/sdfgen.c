@@ -281,6 +281,60 @@
     return output;
   }
 
+  FT_LOCAL_DEF( FT_UShort )
+  solve_quadratic_quation( float  a,
+                           float  b,
+                           float  c,
+                           float  out[2] )
+  {
+    float  discriminant       = 0.0f;
+    float  discriminant_root  = 0.0f;
+
+
+    /* if a == 0.0f then the equation is linear */
+    if ( a == 0.0f )
+    {
+      /* if b == 0.0f then c == 0 is false */
+      if ( b == 0.0f )
+      {
+        return 0;
+      }
+      else
+      {
+        out[0] = -c / b;
+        return 1;
+      }
+    }
+
+    /* compute the discriminant ( i.e. b^2 - 4ac ) */
+    discriminant = ( b * b ) - ( 4.0f * a * c );
+
+    if ( discriminant < 0.0f )
+    {
+      /* both unreal comlex roots */
+      return 0;
+    }
+    else if ( discriminant == 0.0f )
+    {
+      /* equal real roots */
+      /* ( -b ) / 2a */
+      out[0] = -b / ( 2 * a );
+
+      return 1;
+    }
+    else /* discriminant > 0.0f */
+    {
+      /* equal real roots */
+      /* ( -b + discriminant^0.5 ) / 2a */
+      /* ( -b - discriminant^0.5 ) / 2a */
+      discriminant_root = sqrtf( discriminant );
+      out[0] = ( -b + discriminant_root ) / ( 2 * a );
+      out[1] = ( -b - discriminant_root ) / ( 2 * a );
+
+      return 2;
+    }
+  }
+
   FT_LOCAL_DEF( float )
   sdf_vector_length( SDF_Vector  vector )
   {
@@ -345,18 +399,28 @@
     return output;
   }
 
-  FT_LOCAL( float )
+  FT_LOCAL_DEF( float )
   sdf_vector_dot( SDF_Vector  a, 
                   SDF_Vector  b )
   {
     return ( ( a.x * b.x ) + ( a.y * b.y ) );
   }
 
-  FT_LOCAL( float )
+  FT_LOCAL_DEF( float )
   sdf_vector_cross( SDF_Vector  a,
                     SDF_Vector  b )
   {
     return ( ( a.x * b.y ) - ( a.y * b.x ) );
+  }
+
+  FT_LOCAL_DEF( FT_Bool )
+  sdf_vector_equal( SDF_Vector a,
+                    SDF_Vector b )
+  {
+    /* probably should use EPSILON */
+    if ( a.x == b.x && a.y == b.y )
+        return 1;
+    return 0;
   }
 
   FT_LOCAL_DEF( FT_Error )
@@ -427,6 +491,15 @@
       float             sign                    = 0.0f;
 
 
+      /* if both the endpoints of the line segmnet coincide then the   */
+      /* shortest distance will be from `point' to any of the endpoint */
+      if ( sdf_vector_equal( a, b ) == 1 )
+      {
+        final_dist = sdf_vector_sub( a, p );
+        *min_distance = sdf_vector_length( final_dist );
+        break;
+      }
+
       factor = sdf_vector_dot( p_sub_a, line_segment ) /
                sdf_vector_squared_length( line_segment );
       factor = clamp( factor, 0.0f, 1.0f );
@@ -435,23 +508,7 @@
       nearest_point = sdf_vector_add( a, nearest_point );
 
       final_dist = sdf_vector_sub( nearest_point, p );
-
-      /* now that we have the shortest  distance vector from `p' to the */
-      /* line, we can determine the side at which the `p' lies with     */
-      /* respect to line by simply taking the cross product of vectors  */
-      /* `final_dist' and `line_segment'.                               */
-
-      sign = sdf_vector_cross( final_dist, line_segment );
-      if (sign < 0.0f)
-      {
-        /* point inside the outline */
-        *min_distance = sdf_vector_length( final_dist );
-      }
-      else
-      {
-        /* point outside the outline */
-        *min_distance = -sdf_vector_length( final_dist );
-      }
+      *min_distance = sdf_vector_length( final_dist );
 
       break;
     }
@@ -497,8 +554,10 @@
       /* => now the roots of the equation can be computed using the  */
       /*    `Cubic Formula'                                          */
       /*    ( https://mathworld.wolfram.com/CubicFormula.html )      */
-      /*    we distacard the roots which do not lie in the range     */
+      /*    we discard the roots which do not lie in the range       */
       /*    [0.0f, 1.0f] and also check the endpoints ( p0, p2 )     */
+
+      
 
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:

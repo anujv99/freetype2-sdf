@@ -1,3 +1,20 @@
+2020-05-18  Anuj Verma  <anujv@iitbhilai.ac.in>
+	
+	[sdf-outline] removed functionality to return signed distance 
+	from a point to a line.
+
+	* sdfgen.c (get_min_distance): the function no more returns
+	  signed distance. previously if two contour have connected 
+	  endpoints then the function may return positive as well as
+	  negativew with equal distance for both the contour from
+	  specific point if the direction of the contours is different,
+	  then we can't decide  weather the the point is inside or outside
+	  the shape's outline. so, now the function only return unsigned
+	  distance and later we can decide the sign based  on the shortest
+	  distance.
+	* sdfgen.c, sdfgen.h (solve_quadratic_quation): added function to
+	  solve quadratic equations.
+
 2020-05-17  Anuj Verma  <anujv@iitbhilai.ac.in>
 	
 	[sdf-outline] added functionality to return signed distance 
