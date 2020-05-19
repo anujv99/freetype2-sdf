@@ -1,3 +1,16 @@
+2020-05-19  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] added algorithm to return find distance from
+	a point to a quadratic/conic bezier curve.
+
+	* sdfgen.c (get_min_distance): the function instead of the shortest
+	  distance value int `float', now returns the point int vector form
+	  on the curve which is at the least distance from a given point.
+	  Also the function now return shortest distance vector from a point
+	  to a quadratic bezier curve.
+	* sdfgen.c, sdfgen.h (solve_cubic_quation): added function to solve
+	  cubic equations.
+
 2020-05-18  Anuj Verma  <anujv@iitbhilai.ac.in>
 	
 	[sdf-outline] removed functionality to return signed distance 
@@ -6,7 +19,7 @@
 	* sdfgen.c (get_min_distance): the function no more returns
 	  signed distance. previously if two contour have connected 
 	  endpoints then the function may return positive as well as
-	  negativew with equal distance for both the contour from
+	  negative with equal distance for both the contour from
 	  specific point if the direction of the contours is different,
 	  then we can't decide  weather the the point is inside or outside
 	  the shape's outline. so, now the function only return unsigned

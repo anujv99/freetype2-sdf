@@ -1,5 +1,7 @@
 
+#define _USE_MATH_DEFINES
 #include <math.h>
+#include <float.h>
 
 #include <ft2build.h>
 #include FT_INTERNAL_DEBUG_H
@@ -335,6 +337,88 @@
     }
   }
 
+  FT_LOCAL_DEF( FT_UShort )
+  solve_cubic_equation( float a,
+                        float b,
+                        float c,
+                        float d,
+                        float out[3] )
+  {
+    /* the method here is a direct implementation of the `Cubic Formula' */
+    /* https://mathworld.wolfram.com/CubicFormula.html                   */
+
+    float  q              = 0.0f;  /* intermediate      */
+    float  r              = 0.0f;  /* intermediate      */
+    float  discriminant   = 0.0f;  /* discriminant      */
+
+    float  a2             = b;     /* x^2 coefficients  */
+    float  a1             = c;     /* x coefficients    */
+    float  a0             = d;     /* constant          */
+
+    if ( a == 0 )
+    {
+      /* quadratic equation */
+      return solve_quadratic_quation( b, c, d, out );
+    }
+
+    if ( fabs(a) != 1.0f)
+    {
+      /* normalize the coefficients */
+      a2 /= a;
+      a1 /= a;
+      a0 /= a;
+    }
+
+    q = ( ( 3 * a1 ) - ( a2 * a2 ) ) / 9.0f;
+    r = ( ( 9 * a1 * a2) - ( 27 * a0 ) - ( 2 * a2 * a2 * a2) ) / 54;
+    discriminant = ( q * q * q ) + ( r * r );
+
+    if ( discriminant < 0.0f )
+    { 
+      float  t = 0.0f;  /* angle theta */
+
+
+      /* all real unequal roots */
+      t = acos( r / sqrtf( -( q * q * q ) ) );
+      a2 /= 3.0f;
+      q = sqrtf( -q );
+      out[0] = 2 * q * cos( t / 3.0f ) - a2;
+      out[1] = 2 * q * cos( ( t + 2 * M_PI ) / 3.0f ) - a2;
+      out[2] = 2 * q * cos( ( t + 4 * M_PI ) / 3.0f ) - a2;
+
+      return 3;
+    }
+    else if ( discriminant == 0.0f )
+    {
+      float  s = 0.0f;  /* intermediate */
+
+
+      /* all real roots and at least two are equal */
+      s = cbrtf( r );
+      a2 /= -3.0f;
+      out[0] = a2 + ( 2 * s );
+      out[1] = a2 - s;
+
+      return 2;
+    }
+    else /* discriminant > 0.0f */
+    {
+      float  s = 0.0f;  /* intermediate */
+      float  t = 0.0f;  /* intermediate */
+
+
+      /* only one real root */
+      discriminant = sqrtf( discriminant );
+      s = cbrtf( r + discriminant );
+      t = cbrtf( r - discriminant );
+      a2 /= -3.0f;
+      out[0] = a2 + ( s + t );
+
+      return 1;
+    }
+
+  }
+
   FT_LOCAL_DEF( float )
   sdf_vector_length( SDF_Vector  vector )
   {
@@ -426,14 +510,14 @@
   FT_LOCAL_DEF( FT_Error )
   get_min_distance( SDF_Contour*       contour,
                     const SDF_Vector   point,
-                    float             *min_distance )
+                    SDF_Vector        *shortest_point )
   {
     /* compute shortest distance from `point' to the `contour' */
 
     FT_Error  error = FT_Err_Ok;
 
 
-    if ( !contour || !min_distance )
+    if ( !contour || !shortest_point )
       return FT_THROW( Invalid_Argument );
 
     switch ( contour->contour_type ) {
@@ -484,7 +568,6 @@
       const SDF_Vector  p_sub_a                 = sdf_vector_sub( p, a );
 
       SDF_Vector        nearest_point           = zero_vector;
-      SDF_Vector        final_dist              = zero_vector;
 
       float             segment_squared_length  = 0.0f;
       float             factor                  = 0.0f;
@@ -495,8 +578,7 @@
       /* shortest distance will be from `point' to any of the endpoint */
       if ( sdf_vector_equal( a, b ) == 1 )
       {
-        final_dist = sdf_vector_sub( a, p );
-        *min_distance = sdf_vector_length( final_dist );
+        *shortest_point = a;
         break;
       }
 
@@ -507,8 +589,7 @@
       nearest_point = sdf_vector_scale( line_segment, factor );
       nearest_point = sdf_vector_add( a, nearest_point );
 
-      final_dist = sdf_vector_sub( nearest_point, p );
-      *min_distance = sdf_vector_length( final_dist );
+      *shortest_point = nearest_point;
 
       break;
     }
@@ -556,9 +637,86 @@
       /*    ( https://mathworld.wolfram.com/CubicFormula.html )      */
       /*    we discard the roots which do not lie in the range       */
       /*    [0.0f, 1.0f] and also check the endpoints ( p0, p2 )     */
+      /*                                                             */
+      /* [note]: B and B( t ) are different in the above equations   */
 
-      
+      SDF_Vector  aA             = zero_vector; /* A in the above comment */
+      SDF_Vector  bB             = zero_vector; /* B in the above comment */
+      SDF_Vector  nearest_point  = zero_vector;
 
+      SDF_Vector  p0             = contour->start_pos;
+      SDF_Vector  p1             = contour->control_point_a;
+      SDF_Vector  p2             = contour->end_pos;
+      SDF_Vector  p              = point;
+
+      /* cubic coefficients */
+      float       a        = 0.0f;
+      float       b        = 0.0f;
+      float       c        = 0.0f;
+      float       d        = 0.0f;
+      float       min      = FLT_MAX; /* shortest distace */
+
+      float       roots[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+      FT_UShort   num_r    = 0;   /* number of roots */
+      FT_UShort   i        = 0;
+
+
+      aA = sdf_vector_add( p0, p2 );
+      aA = sdf_vector_sub( aA, p1 );
+      aA = sdf_vector_sub( aA, p1 );
+
+      bB = sdf_vector_sub( p1, p0 );
+
+      a  = sdf_vector_dot( aA, aA );
+      b  = sdf_vector_dot( aA, bB );
+      b *= 3.0f;
+      c  = sdf_vector_dot( bB, bB ) +
+           sdf_vector_dot( aA, p0 ) -
+           sdf_vector_dot( aA, p );
+      d  = sdf_vector_dot( p0, bB ) -
+           sdf_vector_dot( p, bB );
+
+      num_r = solve_cubic_equation( a, b, c, d, roots + 2 );
+
+      /* this will take care of the endpoints */
+      roots[0] = 0.0f;
+      roots[1] = 1.0f;
+      num_r += 2;
+
+      for ( i = 0; i < num_r; i++ )
+      {
+        float  t                    = roots[i];
+        float  t2                   = t * t;
+        float  dist                 = 0.0f;
+        
+        SDF_Vector curve_point      = zero_vector;  /* point on the curve */
+        SDF_Vector temp             = zero_vector;
+
+
+        /* only check of t in range [0.0f, 1.0f] */
+        if ( t < 0.0f || t > 1.0f )
+          continue;
+
+        /* B( t ) = t^2( A ) + 2t( B ) + p0  */
+        curve_point  = sdf_vector_scale( aA, t2 );
+        temp = sdf_vector_scale( bB, 2 * t );
+        curve_point = sdf_vector_add( curve_point, temp );
+        curve_point = sdf_vector_add( curve_point, p0 );
+
+        /* compute distance from `point' to the `curve_point' */
+        temp = sdf_vector_sub( curve_point, p );
+        dist = sdf_vector_length( temp );
+
+        if ( dist < min )
+        {
+          min = dist;
+          nearest_point = curve_point;
+        }
+      }
+
+      *shortest_point = nearest_point;
+      break;
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
     default:

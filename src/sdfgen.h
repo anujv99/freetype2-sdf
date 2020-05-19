@@ -115,6 +115,15 @@ FT_BEGIN_HEADER
                            float  c,
                            float  out[2] );
 
+  /* solve a quadratic equation ( ax^3 + bx^2 + cx + d = 0; ) and */
+  /* return the number of roots. the roots are written to `out'.  */
+  FT_LOCAL( FT_UShort )
+  solve_cubic_equation( float a,
+                        float b,
+                        float c,
+                        float d,
+                        float out[3] );
+
   /* returns the magnitude of a vector */
   FT_LOCAL( float )
   sdf_vector_length( SDF_Vector  vector );
@@ -158,11 +167,12 @@ FT_BEGIN_HEADER
   sdf_vector_equal( SDF_Vector  a,
                     SDF_Vector  b );
 
-  /* function returns the shortest distance from a point to a contour.    */
+  /* function returns the point on the contour which is at    */
+  /* least distance from the `point'                          */
   FT_LOCAL( FT_Error )
   get_min_distance( SDF_Contour*       contour,
                     const SDF_Vector   point,
-                    float             *min_distance );
+                    SDF_Vector        *shortest_point );
 
 FT_END_HEADER
 
