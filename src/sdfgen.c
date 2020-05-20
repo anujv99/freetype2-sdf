@@ -510,7 +510,8 @@
   FT_LOCAL_DEF( FT_Error )
   get_min_distance( SDF_Contour*       contour,
                     const SDF_Vector   point,
-                    SDF_Vector        *shortest_point )
+                    SDF_Vector        *shortest_point,
+                    SDF_Vector        *curve_dir )
   {
     /* compute shortest distance from `point' to the `contour' */
 
@@ -590,6 +591,7 @@
       nearest_point = sdf_vector_add( a, nearest_point );
 
       *shortest_point = nearest_point;
+      *curve_dir = sdf_vector_normalize( line_segment );
 
       break;
     }
@@ -608,7 +610,7 @@
       /* p = point from which mimimum distance is to be calculated   */
       /* ----------------------------------------------------------- */
       /* => the equation of a quadratic bezier curve can be written  */
-      /*    B( t ) = ( 1 - t^2 )p0 + 2( 1 - t )tp1 + t^2p2           */
+      /*    B( t ) = ( ( 1 - t )^2 )p0 + 2( 1 - t )tp1 + t^2p2       */
       /*    here t is the factor with range [0.0f, 1.0f]             */
       /*    the above equation can be rewritten as                   */
       /*    B( t ) = t^2( p0 - 2p1 + p2 ) + 2t( p1 - p0 ) + p0       */
@@ -629,7 +631,7 @@
       /*                                                             */
       /*    after simplifying we get a cubic equation as             */
       /*    at^3 + bt^2 + ct + d = 0                                 */
-      /*    a = ( A.A ), b = ( 3A.B ), c = ( B.B + A.p0 - A.p )      */
+      /*    a = ( A.A ), b = ( 3A.B ), c = ( 2B.B + A.p0 - A.p )     */
       /*    d = ( p0.B - p.B )                                       */
       /*                                                             */
       /* => now the roots of the equation can be computed using the  */
@@ -671,8 +673,9 @@
       a  = sdf_vector_dot( aA, aA );
       b  = sdf_vector_dot( aA, bB );
       b *= 3.0f;
-      c  = sdf_vector_dot( bB, bB ) +
-           sdf_vector_dot( aA, p0 ) -
+      c  = sdf_vector_dot( bB, bB );
+      c *= 2.0f;
+      c += sdf_vector_dot( aA, p0 ) -
            sdf_vector_dot( aA, p );
       d  = sdf_vector_dot( p0, bB ) -
            sdf_vector_dot( p, bB );
@@ -719,6 +722,7 @@
       break;
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
+      break;
     default:
       error = FT_THROW( Invalid_Argument );
     }

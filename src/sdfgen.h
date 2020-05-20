@@ -172,7 +172,8 @@ FT_BEGIN_HEADER
   FT_LOCAL( FT_Error )
   get_min_distance( SDF_Contour*       contour,
                     const SDF_Vector   point,
-                    SDF_Vector        *shortest_point );
+                    SDF_Vector        *shortest_point,
+                    SDF_Vector        *curve_dir );
 
 FT_END_HEADER
 
