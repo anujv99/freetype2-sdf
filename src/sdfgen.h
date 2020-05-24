@@ -103,26 +103,53 @@ FT_BEGIN_HEADER
 
   /* function to clamp the input value between min and max */
   FT_LOCAL( float )
-  clamp( float   input,
-         float   min,
-         float   max );
+  clamp( float  input,
+         float  min,
+         float  max );
 
   /* solve a quadratic equation ( ax^2 + bx + c = 0; ) and return */
   /* the number of roots. the roots are written to `out'.         */
   FT_LOCAL( FT_UShort )
-  solve_quadratic_quation( float  a,
-                           float  b,
-                           float  c,
-                           float  out[2] );
+  solve_quadratic_equation( float  a,
+                            float  b,
+                            float  c,
+                            float  out[2] );
 
-  /* solve a quadratic equation ( ax^3 + bx^2 + cx + d = 0; ) and */
+  /* solve a cubic equation ( ax^3 + bx^2 + cx + d = 0; ) and     */
   /* return the number of roots. the roots are written to `out'.  */
   FT_LOCAL( FT_UShort )
-  solve_cubic_equation( float a,
-                        float b,
-                        float c,
-                        float d,
-                        float out[3] );
+  solve_cubic_equation( float  a,
+                        float  b,
+                        float  c,
+                        float  d,
+                        float  out[3] );
+
+
+  /* solve a quartic equation ( ax^4 + bx^3 + cx^2 + dx + e = 0 )   */
+  /* and return the number of roots. the roots are written to `out' */
+  FT_LOCAL( FT_UShort )
+  solve_quartic_equation( float  a,
+                          float  b,
+                          float  c,
+                          float  d,
+                          float  e,
+                          float  out[4] );
+
+
+  /* solve a 5th degree polynomial equation of form :             */
+  /* ax^5 + bx^4 + cx^3 + dx^2 + ex + f = 0 and return the number */
+  /*  of roots. Only the roots within the range [`min', `max']    */
+  /*  are calculated. the roots are written to `out'.             */
+  FT_LOCAL( FT_UShort )
+  solve_quintic_equation( float  a,
+                          float  b,
+                          float  c,
+                          float  d,
+                          float  e,
+                          float  f,
+                          float  min,
+                          float  max,
+                          float  out[5] );
 
   /* returns the magnitude of a vector */
   FT_LOCAL( float )
@@ -132,12 +159,12 @@ FT_BEGIN_HEADER
   FT_LOCAL( float )
   sdf_vector_squared_length( SDF_Vector  vector );
 
-  /* retruns component wise addition of `a' and `b' */
+  /* returns component wise addition of `a' and `b' */
   FT_LOCAL( SDF_Vector )
   sdf_vector_add( SDF_Vector  a,
                   SDF_Vector  b );
 
-  /* retruns component wise subtraction of `a' and `b' */
+  /* returns component wise subtraction of `a' and `b' */
   FT_LOCAL( SDF_Vector )
   sdf_vector_sub( SDF_Vector  a,
                   SDF_Vector  b );

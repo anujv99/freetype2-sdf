@@ -2,6 +2,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <float.h>
+#include <stdlib.h>
 
 #include <ft2build.h>
 #include FT_INTERNAL_DEBUG_H
@@ -284,10 +285,10 @@
   }
 
   FT_LOCAL_DEF( FT_UShort )
-  solve_quadratic_quation( float  a,
-                           float  b,
-                           float  c,
-                           float  out[2] )
+  solve_quadratic_equation( float  a,
+                            float  b,
+                            float  c,
+                            float  out[2] )
   {
     float  discriminant       = 0.0f;
     float  discriminant_root  = 0.0f;
@@ -344,8 +345,9 @@
                         float d,
                         float out[3] )
   {
-    /* the method here is a direct implementation of the `Cubic Formula' */
-    /* https://mathworld.wolfram.com/CubicFormula.html                   */
+    /* the method here is a direct implementation of the  */
+    /* `Cardano's Cubic formula' given here               */
+    /* https://mathworld.wolfram.com/CubicFormula.html    */
 
     float  q              = 0.0f;  /* intermediate      */
     float  r              = 0.0f;  /* intermediate      */
@@ -358,7 +360,7 @@
     if ( a == 0 )
     {
       /* quadratic equation */
-      return solve_quadratic_quation( b, c, d, out );
+      return solve_quadratic_equation( b, c, d, out );
     }
 
     if ( fabs(a) != 1.0f)
@@ -417,6 +419,264 @@
       return 1;
     }
 
+  }
+
+  FT_LOCAL_DEF( FT_UShort )
+  solve_quartic_equation( float  a,
+                          float  b,
+                          float  c,
+                          float  d,
+                          float  e,
+                          float  out[4] )
+  {
+    /* the method here is a direct implementation of the  */
+    /* https://mathworld.wolfram.com/QuarticEquation.html */
+
+
+    /* coefficients of the quartic equation */
+    float  a3 = b;
+    float  a2 = c;
+    float  a1 = d;
+    float  a0 = e;
+
+    /* coefficients of the resolvent cubic */
+    float  y2          = 0.0f;
+    float  y1          = 0.0f;
+    float  y0          = 0.0f;
+    float  y_out[3]    = { 0.0f, 0.0f, 0.0f };
+
+    /* the roots from y_out that will be chosen for computation */
+    float  y_chosen    = 0.0f;
+
+    FT_UShort y_roots  = 0;
+
+    /* coefficients of the final quadratic */
+    float x1           = 0.0f;
+    float x0           = 0.0f;
+
+    /* total number of roots of quartic */
+    FT_UShort t_roots  = 0;
+
+
+    if ( a == 0.0f )
+    {
+      return solve_cubic_equation( b, c, d, e, out );
+    }
+    if ( a != 1.0f )
+    {
+      /* Normalize the coefficients */
+      a3 /= a;
+      a2 /= a;
+      a1 /= a;
+      a0 /= a;
+    }
+
+    y2 = -a2;
+    y1 = ( a1 * a3 ) - ( 4 * a0 );
+    y0 = ( 4 * a2 * a0 ) - ( a1 * a1 ) - ( a3 * a3 * a0 );
+    y_roots = solve_cubic_equation( 1.0f, y2, y1, y0, y_out );
+    y_chosen = y_out[0];
+
+    /* choose the root with max absolute value in case of multiple roots */
+    if (y_roots == 2)
+    {
+      if ( fabs( y_out[1] ) > fabs( y_chosen ) ) y_chosen = y_out[1];
+    }
+    else if ( y_roots == 3 )
+    {
+      if ( fabs( y_out[1] ) > fabs( y_chosen ) ) y_chosen = y_out[1];
+      if ( fabs( y_out[2] ) > fabs( y_chosen ) ) y_chosen = y_out[2];
+    }
+
+
+    /* now use the chosen root of the resolvent cubic to find the roots */
+
+    x1 = ( a3 * a3 ) - ( 4 * a2 ) + ( 4 * y_chosen );
+    x0 = ( y_chosen * y_chosen ) - ( 4 * a0 );
+
+    x1 = sqrtf( x1 );
+    x0 = sqrtf( x0 );
+
+    t_roots  = solve_quadratic_equation( 1.0f, ( a3 + x1 ) / 2.0f, 
+                                         ( y_chosen - x0 ) / 2.0f, 
+                                         out );
+    t_roots += solve_quadratic_equation( 1.0f, ( a3 - x1 ) / 2.0f, 
+                                         ( y_chosen + x0 ) / 2.0f, 
+                                         out + t_roots );
+
+    return t_roots;
+  }
+
+  static int
+  qsort_compare_float( const void * a,
+                       const void * b )
+  {
+    return ( *(float*)a > *(float*)b );
+  }
+
+  FT_LOCAL( FT_UShort )
+  solve_quintic_equation( float  a,
+                          float  b,
+                          float  c,
+                          float  d,
+                          float  e,
+                          float  f,
+                          float  min,
+                          float  max,
+                          float  out[5] )
+  {
+    /* output roots of the quintic equation */
+    float  out_roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+    /* bounds calculated by the isolator polynomial */
+    float  bounds[6]     = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+    FT_UShort  t_roots   = 0; /* total number of roots  */
+    FT_UShort  t_bounds  = 0; /* total number of bounds */
+
+    /* coefficients of the original equation */
+    float      a4  = b;
+    float      a3  = c;
+    float      a2  = d;
+    float      a1  = e;
+    float      a0  = f;
+
+    /* coefficients of the depressed form of equation */
+    float      d3  = 0.0f;
+    float      d2  = 0.0f;
+    float      d1  = 0.0f;
+    float      d0  = 0.0f;
+
+    if ( min > max )
+    {
+      float  temp = 0.0f; 
+
+
+      /* max min < max */
+      temp = min;
+      min = max;
+      max = temp;
+    }
+
+    if ( a == 0.0f )
+    {
+      FT_UShort  temp  = 0;
+      FT_Int     i     = 0;
+
+      /* quartic equation */
+      t_roots = solve_quartic_equation( b, c, d, e, f, out_roots );
+      temp = 0;
+      for ( i = 0; i < t_roots; i++ )
+      {
+        if (out_roots[i] >= min && out_roots[i] <= max)
+          out[temp++] = out_roots[i];
+      }
+
+      return temp;
+    }
+
+    if ( a != 1.0f )
+    {
+      /* Normalize the coefficients */
+      a4 /= a;
+      a3 /= a;
+      a2 /= a;
+      a1 /= a;
+      a0 /= a;
+    }
+
+    /* convert the equation to `depressed' form         */
+    /* i.e. x^5 + ( d3 )x^3 + ( d2 )x2^2 + ( d3 )x + d4 */
+    /* we eleminate the x^( t - 1 ) term to make the eq */
+    /* in depressed form. where t is the degree of eq.  */
+    /* to convert a 5th degree equiation to depressed   */
+    /* form simply put f( x ) -> f( x - a4 / 5 )        */
+
+    if ( a4 == 0.0f )
+    {
+      /* already in depressed form */
+      d3 = a3;
+      d2 = a2;
+      d1 = a1;
+      d0 = a0;
+    }
+    else
+    {
+      float  a42 = a4  * a4; /* ( a4 )^2  */
+      float  a43 = a42 * a4; /* ( a4 )^3  */
+      float  a44 = a43 * a4; /* ( a4 )^4  */
+      float  a45 = a44 * a4; /* ( a4 )^5  */
+
+      d3 = a3 - ( 2.0f * a42 ) / 5.0f;
+      d2 = ( 4.0f * a43 ) / 25.0f - ( 3.0f * a4 * a3 )  / 5.0f + a2;
+      d1 = ( -3.0f * a44 ) / 125.0f +
+           ( 3.0f * a42 * a3 ) / 25.0f  -
+           ( 2.0f * a4 * a2 ) / 5.0f   + a1;
+      d0 = ( 4.0f * a45 ) / 3125.0f - ( a43 * a3 ) / 125.0f +
+           ( a42 * a2 ) / 25.0f - ( a4 * a1 ) / 5.0f + a0;
+    }
+
+    {
+      /* calculate isolator polynomials to find the */
+      /* range where the roots lie.                 */
+      /* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.133.2233&rep=rep1&type=pdf */
+
+      float      ia2        = 0.0f;
+      float      ia1        = 0.0f;
+      float      ia0        = 0.0f;
+                            
+      float      ib2        = 0.0f;
+      float      ib1        = 0.0f;
+      float      ib0        = 0.0f;
+                 
+      float      roots[4]   = { 0.0f, 0.0f, 0.0f, 0.0f };
+      FT_UShort  num_roots  = 0;
+      FT_UShort  i          = 0;
+
+      float      d32        = d3 * d3;
+
+
+      ia2 = ( 12.0f * d32 * d3 ) + ( 45.0f * d2 * d2 ) - ( 40.0f * d3 * d1 );
+      ia1 = ( 8.0f * d32 * d2 ) + ( 60.0f * d2 * d1 ) - ( 50.0f * d3 * d0 );
+      ia0 = ( 4.0f * d32 * d1 ) + ( 75.0f * d2 * d0);
+
+      ib2 = 10.0f * d3;
+      ib1 = -15.0f * d2;
+      ib0 = 4.0f * d32;
+
+      num_roots  = solve_quadratic_equation( ia2, ia1, ia0, roots );
+      num_roots += solve_quadratic_equation( ib2, ib1, ib0, roots + num_roots );
+
+      if ( a4 != 0.0f )
+      {
+        /* we convert the equation to depressed form `a4' != 0 */
+        /* so the bounds of the original equation will be:     */
+        for ( i = 0; i < num_roots; i++ )
+        {
+          roots[i] -= ( a4 / 5.0f );
+        }
+      }
+
+      /* sort the bounds */
+      qsort( ( void * )roots, ( rsize_t )num_roots, sizeof( roots[i] ), 
+               qsort_compare_float );
+
+      /* we will only check for roots within range [min, max] */
+      bounds[0] = min;
+      t_bounds = 1;
+      for ( i = 0; i < num_roots; i++ )
+      {
+        if ( roots[i] > min && roots[i] < max )
+        {
+          bounds[t_bounds] = roots[i];
+          t_bounds++;
+        }
+      }
+      bounds[t_bounds] = max;
+      t_bounds++;
+    }
+
+    return 0;
   }
 
   FT_LOCAL_DEF( float )
@@ -524,12 +784,12 @@
     switch ( contour->contour_type ) {
     case SDF_CONTOUR_TYPE_LINE:
     {
-      /* in order to calculate the mimimum distance from a point to  */
+      /* in order to calculate the shortest distance from a point to */
       /* a line segment.                                             */
       /*                                                             */
       /* a = start point of the line segment                         */
       /* b = end point of the line segment                           */
-      /* p = point from which mimimum distance is to be calculated   */
+      /* p = point from which shortest distance is to be calculated  */
       /* ----------------------------------------------------------- */
       /* => we first write the parametric equation of the line       */
       /*    point_on_line = a + ( b - a ) * t ( t is the factor )    */
@@ -607,7 +867,7 @@
       /* p0 = first endpoint                                         */
       /* p1 = control point                                          */
       /* p2 = second endpoint                                        */
-      /* p = point from which mimimum distance is to be calculated   */
+      /* p = point from which shortest distance is to be calculated  */
       /* ----------------------------------------------------------- */
       /* => the equation of a quadratic bezier curve can be written  */
       /*    B( t ) = ( ( 1 - t )^2 )p0 + 2( 1 - t )tp1 + t^2p2       */
@@ -615,14 +875,14 @@
       /*    the above equation can be rewritten as                   */
       /*    B( t ) = t^2( p0 - 2p1 + p2 ) + 2t( p1 - p0 ) + p0       */
       /*                                                             */
-      /*    now put A = ( p0 - 2p1 + p2), B = ( p1 - p0 )            */
+      /*    now let A = ( p0 - 2p1 + p2), B = ( p1 - p0 )            */
       /*    B( t ) = t^2( A ) + 2t( B ) + p0                         */
       /*                                                             */
       /* => the derivative of the above equation is written as       */
       /*    B`( t ) = 2( tA + B )                                    */
       /*                                                             */
       /* => now to find the shortest distance from p to B( t ), we   */
-      /*    make find the point on the curve at which the shortest   */
+      /*    find the point on the curve at which the shortest        */
       /*    distance vector ( i.e. B( t ) - p ) and the direction    */
       /*    ( i.e. B`( t )) makes 90 degrees. in other words we make */
       /*    the dot product zero.                                    */
@@ -635,7 +895,7 @@
       /*    d = ( p0.B - p.B )                                       */
       /*                                                             */
       /* => now the roots of the equation can be computed using the  */
-      /*    `Cubic Formula'                                          */
+      /*    `Cardano's Cubic formula'                                */
       /*    ( https://mathworld.wolfram.com/CubicFormula.html )      */
       /*    we discard the roots which do not lie in the range       */
       /*    [0.0f, 1.0f] and also check the endpoints ( p0, p2 )     */
@@ -722,7 +982,56 @@
       break;
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
-      break;
+    {
+      /* the procedure to find the shortest distance from a point to */
+      /* a cubci bezier curve is simliar to a quadratic curve.       */
+      /* The only difference is that while calculating the factor    */
+      /* `t', instead of a cubic polynomial equation we have to find */
+      /* the roots of a 5th degree polynomial equation.              */
+      /*                                                             */
+      /* p0 = first endpoint                                         */
+      /* p1 = first control point                                    */
+      /* p2 = seconf control point                                   */
+      /* p3 = second endpoint                                        */
+      /* p = point from which shortest distance is to be calculated  */
+      /* ----------------------------------------------------------- */
+      /* => the equation of a cubic bezier curve can be written as:  */
+      /*    B( t ) = ( ( 1 - t )^3 )p0 + 3( ( 1 - t )^2 )tp1 +       */
+      /*             3( 1 - t )( t^2 )p2 + ( t^3 )p3                 */
+      /*    The equation can be expanded and written as:             */
+      /*    B( t ) = ( t^3 )( -p0 + 3p1 - 3p2 + p3 ) +               */
+      /*             3( t^2 )( p0 - 2p1 + p2 ) + 3t( -p0 + p1 ) + p0 */
+      /*                                                             */
+      /*    Now let A = ( -p0 + 3p1 - 3p2 + p3 ),                    */
+      /*            B = ( p0 - 2p1 + p2 ), C = ( -p0 + p1 )          */
+      /*    B( t ) = t^3( A ) + 3t^2( B ) + 3tC + p0                 */
+      /*                                                             */
+      /* => the derivative of the above equation is written as       */
+      /*    B`( t ) = 3t^2( A ) + 6t( B ) + 3C                       */
+      /*                                                             */
+      /* => now similar to quadratic bezier, to find the nearest     */
+      /*    point on the curve from `p', we make the dot product     */
+      /*    zero i.e. ( B( t ) - p ).( B`( t ) ) = 0, we get:        */
+      /*    ( t^3( A ) + 3t^2( B ) + 3tC + p0 - p ).                 */
+      /*    ( 3t^2( A ) + 6t( B ) + 3C) = 0                          */
+      /*                                                             */
+      /*    in the above equation put D = ( p0 - p )                 */
+      /*                                                             */
+      /* => finally we get a 5th order polynomial equation:          */
+      /*    t^5( A.A ) + t^4( 5A.C ) + t^3( 4A.C + 6B.B ) +          */
+      /*    t^2( 9C.B + A.D ) + t( 3C.C + 2B.D ) + C.D               */
+      /*                                                             */
+      /* => the roots within range [0.0f, 1.0f] will give us the     */
+      /*    factor `t' at which the curve B( t ) makes 90 degree     */
+      /*    with ( B( t ) - p ), and hence that will be the shortest */
+      /*    distance. But we also have to check the endpoints `p0'   */
+      /*    and `p1' because they can be even closer to the point    */
+      /*    `p'.                                                     */
+      /*                                                             */
+      /* [note]: B and B( t ) are different in the above equations   */
+
+      
+    }
     default:
       error = FT_THROW( Invalid_Argument );
     }

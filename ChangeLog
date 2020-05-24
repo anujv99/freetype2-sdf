@@ -1,3 +1,14 @@
+2020-05-24  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	* sdfgen.c (get_min_distance): added comment explaining the 
+	  entire procedure of calculating shortest distance from a 
+	  point to a cubic bezier curve.
+	* sdfgen.c (solve_quartic_equation): added function to solve
+	  a 4th degree polynomial equation.
+	* sdfgen.c (solve_quintic_equation): added function to solve
+	  a 5th degree polynomial equation. This is not complete yet.
+	  For now it only compute the range in which the roots lie.
+
 2020-05-20  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	* sdfgen.c (get_min_distance): fixed a calculation mistake for
