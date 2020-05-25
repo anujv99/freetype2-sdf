@@ -1,3 +1,13 @@
+2020-05-25  Anuj Verma  <anujv@iitbhilai.ac.in>
+	* sdfgen.c (solve_quintic_equation): finished the algorithm to
+	  compute roots of a 5th degree polynomial equation. First the
+	  ranges in which the roots lie are calculated using isolator
+	  polynomials and then Newton-Raphson's method is used to find
+	  the approximate roots within the  ranges.
+	* sdfgen.c (get_min_distance): the function now return direction
+	  of the quadratic bezier at the shortest point ( previously only
+	  returned for lines ).
+
 2020-05-24  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	* sdfgen.c (get_min_distance): added comment explaining the 

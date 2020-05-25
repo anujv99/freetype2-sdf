@@ -44,6 +44,11 @@
     SDF_Shape_Init( &shape );
     shape.memory = library->memory;
 
+    float out[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+    FT_UShort num_roots = solve_quintic_equation( 1, -15, 85, -225, 274, -120, 0.0f, 6.0f, out );
+    //FT_UShort num_roots = solve_quintic_equation( 1, 0, -23, 6, 112, -96, 1.0f, 5.0f, out );
+
     /* decompost the outline and store in into the SDF_Shape struct   */
     /* this provide an easier way to iterate through all the contours */
     error = SDF_Decompose_Outline( outline, &shape );
@@ -525,6 +530,14 @@
                           float  max,
                           float  out[5] )
   {
+    /* The procedure to find the roots of a quintic equation  */
+    /* is completed in two steps:                             */
+    /* * First we find the range in which the roots lie using */
+    /*   isolator polynomails.                                */
+    /* * Then after we have know the range in which the roots */
+    /*   lie, we use Newton-Raphson method to apprximate the  */
+    /*   roots within those ranges.                           */
+
     /* output roots of the quintic equation */
     float  out_roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
@@ -676,7 +689,87 @@
       t_bounds++;
     }
 
-    return 0;
+    {
+      /* Use Newton-Raphson method to find the roots */
+
+      /* coefficients of the derivative of the original quintic */
+      float      ad4 = 5.0f;            /* of x^4   */
+      float      ad3 = ( 4.0f * a4 );   /* of x^3   */
+      float      ad2 = ( 3.0f * a3 );   /* of x^2   */
+      float      ad1 = ( 2.0f * a2 );   /* of x^1   */
+      float      ad0 = a1;              /* constant */
+
+      FT_UShort  i   = 0;
+
+
+      for ( i = 0; i < t_bounds - 1; i++ )
+      {
+        const float epsilon     = 0.0001f;
+
+        /* start guessing from the mid point of the range */
+        float  current_guess    = ( bounds[i] + bounds[i + 1] ) / 2.0f;
+        float  limit            = bounds[i + 1];
+        float  prev_guess       = 0.0f;
+                                
+        float  v1               = 0.0f;
+        float  v2               = 0.0f;
+
+        /* difference b/w current and prev guesss */
+        float  diff             = 0.0f;
+
+        /* calculate f( prev_guess ) and f`( prev_guess ) then calculate   */
+        /* current_guess = prev_guess - f( prev_guess ) / f`( prev_guess ) */
+        /* if current_guess and prev_guess are close then we found root.   */
+        do
+        {
+          float  fx     = 0.0f; /* f( initial_guess )  */
+          float  f_x    = 0.0f; /* f`( initial_guess ) */
+          float  val    = 0.0f; /* temp value */
+
+          prev_guess = current_guess;
+
+          /* constant term */
+          fx   = a0;
+          f_x  = ad0;
+
+          /* x^1 term */
+          val = prev_guess;
+          fx  += a1 * val;
+          f_x += ad1 * val;
+
+          /* x^2 term */
+          val *= prev_guess;
+          fx  += a2 * val;
+          f_x += ad2 * val;
+
+          /* x^3 term */
+          val *= prev_guess;
+          fx  += a3 * val;
+          f_x += ad3 * val;
+
+          /* x^4 term */
+          val *= prev_guess;
+          fx  += a4 * val;
+          f_x += ad4 * val;
+
+          /* x^5 term */
+          val *= prev_guess;
+          fx  += val;
+
+          current_guess = prev_guess - ( fx / f_x );
+          diff = fabs( fabs( current_guess ) - fabs( prev_guess ) );
+
+        } while ( diff > epsilon && current_guess < limit + epsilon );
+
+        if ( diff <= epsilon )
+        {
+          out[t_roots] = current_guess;
+          t_roots += 1;
+        }
+      }
+    }
+
+    return t_roots;
   }
 
   FT_LOCAL_DEF( float )
@@ -912,16 +1005,19 @@
       SDF_Vector  p              = point;
 
       /* cubic coefficients */
-      float       a        = 0.0f;
-      float       b        = 0.0f;
-      float       c        = 0.0f;
-      float       d        = 0.0f;
-      float       min      = FLT_MAX; /* shortest distace */
+      float       a         = 0.0f;
+      float       b         = 0.0f;
+      float       c         = 0.0f;
+      float       d         = 0.0f;
+      float       min       = FLT_MAX; /* shortest distace */
+                            
+      float       roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
-      float       roots[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      /* factor `t' of the shortest point on curve */
+      float       np_factor = 0.0f;
 
-      FT_UShort   num_r    = 0;   /* number of roots */
-      FT_UShort   i        = 0;
+      FT_UShort   num_r     = 0;   /* number of roots */
+      FT_UShort   i         = 0;
 
 
       aA = sdf_vector_add( p0, p2 );
@@ -975,10 +1071,18 @@
         {
           min = dist;
           nearest_point = curve_point;
+          np_factor = t;
         }
       }
 
       *shortest_point = nearest_point;
+      
+      /* calculate direction of shortest point on the curve using  */
+      /* B`( t ) = 2( tA + B )                                     */
+      *curve_dir = sdf_vector_scale( aA, np_factor );
+      *curve_dir = sdf_vector_add( *curve_dir, bB );
+      *curve_dir = sdf_vector_scale( *curve_dir, 2.0f );
+      *curve_dir = sdf_vector_normalize( *curve_dir );
       break;
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
