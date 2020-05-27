@@ -44,16 +44,61 @@
     SDF_Shape_Init( &shape );
     shape.memory = library->memory;
 
-    float out[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    FT_UShort num_roots = solve_quintic_equation( 1, -15, 85, -225, 274, -120, 0.0f, 6.0f, out );
-    //FT_UShort num_roots = solve_quintic_equation( 1, 0, -23, 6, 112, -96, 1.0f, 5.0f, out );
-
-    /* decompost the outline and store in into the SDF_Shape struct   */
-    /* this provide an easier way to iterate through all the contours */
+    /* decompose the outline and store in into the SDF_Shape struct */
+    /* this provide an easier way to iterate through all the curves */
     error = SDF_Decompose_Outline( outline, &shape );
     if ( error != FT_Err_Ok )
       goto Exit;
+
+    float max_dist = 0.0f;
+    
+    float * buffer = NULL;
+    FT_Memory memory = library->memory;
+    FT_MEM_ALLOC( buffer, abitmap->rows * abitmap->width * sizeof( float ) );
+
+    for ( int j = 0; j < abitmap->rows; j++ )
+    {
+      for ( int i = 0; i < abitmap->width; i++ )
+      {
+        
+        SDF_Contour * head = shape.contour_head;
+        float min_dist = FLT_MAX;
+        SDF_Vector point;
+        point.x = ( float )i;
+        point.y = ( float )abitmap->rows - ( float )j;
+
+        while ( head != NULL )
+        {
+          float length = 0.0f;
+          SDF_Vector shrt;
+          SDF_Vector dir;
+
+          get_min_distance( head, point, &shrt, &dir );
+
+          length = sdf_vector_length( sdf_vector_sub( shrt, point ) );
+
+          if ( length < min_dist )
+            min_dist = length;
+
+          head = head->next;
+        }
+
+        if ( min_dist > max_dist )
+          max_dist = min_dist;
+
+        buffer[j * abitmap->width + i] = min_dist;
+      }
+    }
+
+    for ( int i = 0; i < abitmap->rows * abitmap->width; i++ )
+    {
+      buffer[i] /= max_dist;
+      buffer[i] = 1.0f - buffer[i];
+
+      abitmap->buffer[i] = ( unsigned char )( buffer[i] * 255.0f );
+    }
+
+    FT_MEM_FREE( buffer );
 
     Exit:
     SDF_Shape_Done( &shape );
@@ -426,352 +471,6 @@
 
   }
 
-  FT_LOCAL_DEF( FT_UShort )
-  solve_quartic_equation( float  a,
-                          float  b,
-                          float  c,
-                          float  d,
-                          float  e,
-                          float  out[4] )
-  {
-    /* the method here is a direct implementation of the  */
-    /* https://mathworld.wolfram.com/QuarticEquation.html */
-
-
-    /* coefficients of the quartic equation */
-    float  a3 = b;
-    float  a2 = c;
-    float  a1 = d;
-    float  a0 = e;
-
-    /* coefficients of the resolvent cubic */
-    float  y2          = 0.0f;
-    float  y1          = 0.0f;
-    float  y0          = 0.0f;
-    float  y_out[3]    = { 0.0f, 0.0f, 0.0f };
-
-    /* the roots from y_out that will be chosen for computation */
-    float  y_chosen    = 0.0f;
-
-    FT_UShort y_roots  = 0;
-
-    /* coefficients of the final quadratic */
-    float x1           = 0.0f;
-    float x0           = 0.0f;
-
-    /* total number of roots of quartic */
-    FT_UShort t_roots  = 0;
-
-
-    if ( a == 0.0f )
-    {
-      return solve_cubic_equation( b, c, d, e, out );
-    }
-    if ( a != 1.0f )
-    {
-      /* Normalize the coefficients */
-      a3 /= a;
-      a2 /= a;
-      a1 /= a;
-      a0 /= a;
-    }
-
-    y2 = -a2;
-    y1 = ( a1 * a3 ) - ( 4 * a0 );
-    y0 = ( 4 * a2 * a0 ) - ( a1 * a1 ) - ( a3 * a3 * a0 );
-    y_roots = solve_cubic_equation( 1.0f, y2, y1, y0, y_out );
-    y_chosen = y_out[0];
-
-    /* choose the root with max absolute value in case of multiple roots */
-    if (y_roots == 2)
-    {
-      if ( fabs( y_out[1] ) > fabs( y_chosen ) ) y_chosen = y_out[1];
-    }
-    else if ( y_roots == 3 )
-    {
-      if ( fabs( y_out[1] ) > fabs( y_chosen ) ) y_chosen = y_out[1];
-      if ( fabs( y_out[2] ) > fabs( y_chosen ) ) y_chosen = y_out[2];
-    }
-
-
-    /* now use the chosen root of the resolvent cubic to find the roots */
-
-    x1 = ( a3 * a3 ) - ( 4 * a2 ) + ( 4 * y_chosen );
-    x0 = ( y_chosen * y_chosen ) - ( 4 * a0 );
-
-    x1 = sqrtf( x1 );
-    x0 = sqrtf( x0 );
-
-    t_roots  = solve_quadratic_equation( 1.0f, ( a3 + x1 ) / 2.0f, 
-                                         ( y_chosen - x0 ) / 2.0f, 
-                                         out );
-    t_roots += solve_quadratic_equation( 1.0f, ( a3 - x1 ) / 2.0f, 
-                                         ( y_chosen + x0 ) / 2.0f, 
-                                         out + t_roots );
-
-    return t_roots;
-  }
-
-  static int
-  qsort_compare_float( const void * a,
-                       const void * b )
-  {
-    return ( *(float*)a > *(float*)b );
-  }
-
-  FT_LOCAL( FT_UShort )
-  solve_quintic_equation( float  a,
-                          float  b,
-                          float  c,
-                          float  d,
-                          float  e,
-                          float  f,
-                          float  min,
-                          float  max,
-                          float  out[5] )
-  {
-    /* The procedure to find the roots of a quintic equation  */
-    /* is completed in two steps:                             */
-    /* * First we find the range in which the roots lie using */
-    /*   isolator polynomails.                                */
-    /* * Then after we have know the range in which the roots */
-    /*   lie, we use Newton-Raphson method to apprximate the  */
-    /*   roots within those ranges.                           */
-
-    /* output roots of the quintic equation */
-    float  out_roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    /* bounds calculated by the isolator polynomial */
-    float  bounds[6]     = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    FT_UShort  t_roots   = 0; /* total number of roots  */
-    FT_UShort  t_bounds  = 0; /* total number of bounds */
-
-    /* coefficients of the original equation */
-    float      a4  = b;
-    float      a3  = c;
-    float      a2  = d;
-    float      a1  = e;
-    float      a0  = f;
-
-    /* coefficients of the depressed form of equation */
-    float      d3  = 0.0f;
-    float      d2  = 0.0f;
-    float      d1  = 0.0f;
-    float      d0  = 0.0f;
-
-    if ( min > max )
-    {
-      float  temp = 0.0f; 
-
-
-      /* max min < max */
-      temp = min;
-      min = max;
-      max = temp;
-    }
-
-    if ( a == 0.0f )
-    {
-      FT_UShort  temp  = 0;
-      FT_Int     i     = 0;
-
-      /* quartic equation */
-      t_roots = solve_quartic_equation( b, c, d, e, f, out_roots );
-      temp = 0;
-      for ( i = 0; i < t_roots; i++ )
-      {
-        if (out_roots[i] >= min && out_roots[i] <= max)
-          out[temp++] = out_roots[i];
-      }
-
-      return temp;
-    }
-
-    if ( a != 1.0f )
-    {
-      /* Normalize the coefficients */
-      a4 /= a;
-      a3 /= a;
-      a2 /= a;
-      a1 /= a;
-      a0 /= a;
-    }
-
-    /* convert the equation to `depressed' form         */
-    /* i.e. x^5 + ( d3 )x^3 + ( d2 )x2^2 + ( d3 )x + d4 */
-    /* we eleminate the x^( t - 1 ) term to make the eq */
-    /* in depressed form. where t is the degree of eq.  */
-    /* to convert a 5th degree equiation to depressed   */
-    /* form simply put f( x ) -> f( x - a4 / 5 )        */
-
-    if ( a4 == 0.0f )
-    {
-      /* already in depressed form */
-      d3 = a3;
-      d2 = a2;
-      d1 = a1;
-      d0 = a0;
-    }
-    else
-    {
-      float  a42 = a4  * a4; /* ( a4 )^2  */
-      float  a43 = a42 * a4; /* ( a4 )^3  */
-      float  a44 = a43 * a4; /* ( a4 )^4  */
-      float  a45 = a44 * a4; /* ( a4 )^5  */
-
-      d3 = a3 - ( 2.0f * a42 ) / 5.0f;
-      d2 = ( 4.0f * a43 ) / 25.0f - ( 3.0f * a4 * a3 )  / 5.0f + a2;
-      d1 = ( -3.0f * a44 ) / 125.0f +
-           ( 3.0f * a42 * a3 ) / 25.0f  -
-           ( 2.0f * a4 * a2 ) / 5.0f   + a1;
-      d0 = ( 4.0f * a45 ) / 3125.0f - ( a43 * a3 ) / 125.0f +
-           ( a42 * a2 ) / 25.0f - ( a4 * a1 ) / 5.0f + a0;
-    }
-
-    {
-      /* calculate isolator polynomials to find the */
-      /* range where the roots lie.                 */
-      /* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.133.2233&rep=rep1&type=pdf */
-
-      float      ia2        = 0.0f;
-      float      ia1        = 0.0f;
-      float      ia0        = 0.0f;
-                            
-      float      ib2        = 0.0f;
-      float      ib1        = 0.0f;
-      float      ib0        = 0.0f;
-                 
-      float      roots[4]   = { 0.0f, 0.0f, 0.0f, 0.0f };
-      FT_UShort  num_roots  = 0;
-      FT_UShort  i          = 0;
-
-      float      d32        = d3 * d3;
-
-
-      ia2 = ( 12.0f * d32 * d3 ) + ( 45.0f * d2 * d2 ) - ( 40.0f * d3 * d1 );
-      ia1 = ( 8.0f * d32 * d2 ) + ( 60.0f * d2 * d1 ) - ( 50.0f * d3 * d0 );
-      ia0 = ( 4.0f * d32 * d1 ) + ( 75.0f * d2 * d0);
-
-      ib2 = 10.0f * d3;
-      ib1 = -15.0f * d2;
-      ib0 = 4.0f * d32;
-
-      num_roots  = solve_quadratic_equation( ia2, ia1, ia0, roots );
-      num_roots += solve_quadratic_equation( ib2, ib1, ib0, roots + num_roots );
-
-      if ( a4 != 0.0f )
-      {
-        /* we convert the equation to depressed form `a4' != 0 */
-        /* so the bounds of the original equation will be:     */
-        for ( i = 0; i < num_roots; i++ )
-        {
-          roots[i] -= ( a4 / 5.0f );
-        }
-      }
-
-      /* sort the bounds */
-      qsort( ( void * )roots, ( rsize_t )num_roots, sizeof( roots[i] ), 
-               qsort_compare_float );
-
-      /* we will only check for roots within range [min, max] */
-      bounds[0] = min;
-      t_bounds = 1;
-      for ( i = 0; i < num_roots; i++ )
-      {
-        if ( roots[i] > min && roots[i] < max )
-        {
-          bounds[t_bounds] = roots[i];
-          t_bounds++;
-        }
-      }
-      bounds[t_bounds] = max;
-      t_bounds++;
-    }
-
-    {
-      /* Use Newton-Raphson method to find the roots */
-
-      /* coefficients of the derivative of the original quintic */
-      float      ad4 = 5.0f;            /* of x^4   */
-      float      ad3 = ( 4.0f * a4 );   /* of x^3   */
-      float      ad2 = ( 3.0f * a3 );   /* of x^2   */
-      float      ad1 = ( 2.0f * a2 );   /* of x^1   */
-      float      ad0 = a1;              /* constant */
-
-      FT_UShort  i   = 0;
-
-
-      for ( i = 0; i < t_bounds - 1; i++ )
-      {
-        const float epsilon     = 0.0001f;
-
-        /* start guessing from the mid point of the range */
-        float  current_guess    = ( bounds[i] + bounds[i + 1] ) / 2.0f;
-        float  limit            = bounds[i + 1];
-        float  prev_guess       = 0.0f;
-                                
-        float  v1               = 0.0f;
-        float  v2               = 0.0f;
-
-        /* difference b/w current and prev guesss */
-        float  diff             = 0.0f;
-
-        /* calculate f( prev_guess ) and f`( prev_guess ) then calculate   */
-        /* current_guess = prev_guess - f( prev_guess ) / f`( prev_guess ) */
-        /* if current_guess and prev_guess are close then we found root.   */
-        do
-        {
-          float  fx     = 0.0f; /* f( initial_guess )  */
-          float  f_x    = 0.0f; /* f`( initial_guess ) */
-          float  val    = 0.0f; /* temp value */
-
-          prev_guess = current_guess;
-
-          /* constant term */
-          fx   = a0;
-          f_x  = ad0;
-
-          /* x^1 term */
-          val = prev_guess;
-          fx  += a1 * val;
-          f_x += ad1 * val;
-
-          /* x^2 term */
-          val *= prev_guess;
-          fx  += a2 * val;
-          f_x += ad2 * val;
-
-          /* x^3 term */
-          val *= prev_guess;
-          fx  += a3 * val;
-          f_x += ad3 * val;
-
-          /* x^4 term */
-          val *= prev_guess;
-          fx  += a4 * val;
-          f_x += ad4 * val;
-
-          /* x^5 term */
-          val *= prev_guess;
-          fx  += val;
-
-          current_guess = prev_guess - ( fx / f_x );
-          diff = fabs( fabs( current_guess ) - fabs( prev_guess ) );
-
-        } while ( diff > epsilon && current_guess < limit + epsilon );
-
-        if ( diff <= epsilon )
-        {
-          out[t_roots] = current_guess;
-          t_roots += 1;
-        }
-      }
-    }
-
-    return t_roots;
-  }
-
   FT_LOCAL_DEF( float )
   sdf_vector_length( SDF_Vector  vector )
   {
@@ -1059,7 +758,7 @@
 
         /* B( t ) = t^2( A ) + 2t( B ) + p0  */
         curve_point  = sdf_vector_scale( aA, t2 );
-        temp = sdf_vector_scale( bB, 2 * t );
+        temp = sdf_vector_scale( bB, 2.0f * t );
         curve_point = sdf_vector_add( curve_point, temp );
         curve_point = sdf_vector_add( curve_point, p0 );
 
@@ -1088,10 +787,14 @@
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
     {
       /* the procedure to find the shortest distance from a point to */
-      /* a cubci bezier curve is simliar to a quadratic curve.       */
+      /* a cubic bezier curve is simliar to a quadratic curve.       */
       /* The only difference is that while calculating the factor    */
       /* `t', instead of a cubic polynomial equation we have to find */
       /* the roots of a 5th degree polynomial equation.              */
+      /* But since solving a 5th degree polynomial equation require  */
+      /* significant amount of time and still the results may not be */
+      /* accurate, we are going to directly approximate the value of */
+      /* `t' using Newton-Raphson method                             */
       /*                                                             */
       /* p0 = first endpoint                                         */
       /* p1 = first control point                                    */
@@ -1107,34 +810,155 @@
       /*             3( t^2 )( p0 - 2p1 + p2 ) + 3t( -p0 + p1 ) + p0 */
       /*                                                             */
       /*    Now let A = ( -p0 + 3p1 - 3p2 + p3 ),                    */
-      /*            B = ( p0 - 2p1 + p2 ), C = ( -p0 + p1 )          */
-      /*    B( t ) = t^3( A ) + 3t^2( B ) + 3tC + p0                 */
+      /*            B = 3( p0 - 2p1 + p2 ), C = 3( -p0 + p1 )        */
+      /*    B( t ) = t^3( A ) + t^2( B ) + tC + p0                   */
       /*                                                             */
       /* => the derivative of the above equation is written as       */
-      /*    B`( t ) = 3t^2( A ) + 6t( B ) + 3C                       */
+      /*    B`( t ) = 3t^2( A ) + 2t( B ) + C                        */
       /*                                                             */
-      /* => now similar to quadratic bezier, to find the nearest     */
-      /*    point on the curve from `p', we make the dot product     */
-      /*    zero i.e. ( B( t ) - p ).( B`( t ) ) = 0, we get:        */
-      /*    ( t^3( A ) + 3t^2( B ) + 3tC + p0 - p ).                 */
-      /*    ( 3t^2( A ) + 6t( B ) + 3C) = 0                          */
+      /* => further derivative of the above equation is written as   */
+      /*    B``( t ) = 6t( A ) + 2B                                  */
       /*                                                             */
-      /*    in the above equation put D = ( p0 - p )                 */
+      /* => the equation of distance from point `p' to the curve     */
+      /*    P( t ) can be written as                                 */
+      /*    P( t ) = t^3( A ) + t^2( B ) + tC + p0 - p               */
+      /*    Now let D = ( p0 - p )                                   */
+      /*    P( t ) = t^3( A ) + t^2( B ) + tC + D                    */
       /*                                                             */
-      /* => finally we get a 5th order polynomial equation:          */
-      /*    t^5( A.A ) + t^4( 5A.C ) + t^3( 4A.C + 6B.B ) +          */
-      /*    t^2( 9C.B + A.D ) + t( 3C.C + 2B.D ) + C.D               */
+      /* => finally the equation of angle between curve B( t ) and   */
+      /*    point to curve distance P( t ) can be written as         */
+      /*    Q( t ) = P( t ).B`( t )                                  */
       /*                                                             */
-      /* => the roots within range [0.0f, 1.0f] will give us the     */
-      /*    factor `t' at which the curve B( t ) makes 90 degree     */
-      /*    with ( B( t ) - p ), and hence that will be the shortest */
-      /*    distance. But we also have to check the endpoints `p0'   */
-      /*    and `p1' because they can be even closer to the point    */
-      /*    `p'.                                                     */
+      /* => now our task is to find a value of t such that the above */
+      /*    equation Q( t ) becomes zero. in other words the point   */
+      /*    to curve vector makes 90 degree with curve. this is done */
+      /*    by Newton-Raphson's method.                              */
+      /*                                                             */
+      /* => we first assume a arbitary value of the factor `t' and   */
+      /*    then we improve it using Newton's equation such as       */
+      /*                                                             */
+      /*    t -= Q( t ) / Q`( t )                                    */
+      /*    putting value of Q( t ) from the above equation gives    */
+      /*                                                             */
+      /*    t -= P( t ).B`( t ) / derivative( P( t ).B`( t ) )       */
+      /*    t -= P( t ).B`( t ) /                                    */
+      /*         ( P`( t )B`( t ) + P( t ).B``( t ) )                */
+      /*                                                             */
+      /*    P`( t ) is noting but B`( t ) because the constant are   */
+      /*    gone due to derivative                                   */
+      /*                                                             */
+      /* => finally we get the equation to improve the factor as     */
+      /*    t -= P( t ).B`( t ) /                                    */
+      /*         ( B`( t ).B`( t ) + P( t ).B``( t ) )               */
       /*                                                             */
       /* [note]: B and B( t ) are different in the above equations   */
 
+      SDF_Vector  aA             = zero_vector; /* A in the above comment */
+      SDF_Vector  bB             = zero_vector; /* B in the above comment */
+      SDF_Vector  cC             = zero_vector; /* C in the above comment */
+      SDF_Vector  dD             = zero_vector; /* D in the above comment */
+      SDF_Vector  nearest_point  = zero_vector;
+      SDF_Vector  temp           = zero_vector;
+
+      SDF_Vector  p0             = contour->start_pos;
+      SDF_Vector  p1             = contour->control_point_a;
+      SDF_Vector  p2             = contour->control_point_b;
+      SDF_Vector  p3             = contour->end_pos;
+      SDF_Vector  p              = point;
+
+      float       min_distance   = FLT_MAX;
+      float       min_factor     = 0.0f;
       
+      FT_UShort   iterations     = 0;
+      FT_UShort   steps          = 0;
+
+      const FT_UShort  MAX_STEPS      = 4;
+      const FT_UShort  MAX_DIVISIONS  = 4;
+
+
+      aA = sdf_vector_sub( p1, p2 );
+      aA = sdf_vector_scale( aA, 3.0f );
+      aA = sdf_vector_sub( aA, p0 );
+      aA = sdf_vector_add( aA, p3 );
+
+      bB = sdf_vector_scale( p1, -2.0f );
+      bB = sdf_vector_add( bB, p0 );
+      bB = sdf_vector_add( bB, p2 );
+      bB = sdf_vector_scale( bB, 3.0f );
+
+      cC = sdf_vector_sub( p1, p0 );
+      cC = sdf_vector_scale( cC, 3.0f );
+
+      dD = sdf_vector_sub( p0, p );
+
+      for ( iterations = 0; iterations <= MAX_DIVISIONS; iterations++ )
+      {
+        float       factor  = ( float )iterations / ( float )MAX_DIVISIONS;
+        float       factor2 = 0.0f;
+        float       factor3 = 0.0f;
+        float       length  = 0.0f;
+
+        SDF_Vector point_to_curve  = zero_vector;  /* P( t ) above      */
+        SDF_Vector d1              = zero_vector;  /* first derivative  */
+        SDF_Vector d2              = zero_vector;  /* second derivative */
+
+
+        for ( steps = 0; steps < MAX_STEPS; steps++ )
+        {
+          factor2 = factor * factor;
+          factor3 = factor2 * factor;
+
+          /* calculate P( t ) = t^3( A ) + t^2( B ) + tC + D  */
+          point_to_curve = sdf_vector_scale( aA, factor3 );
+          temp = sdf_vector_scale( bB, factor2 );
+          point_to_curve = sdf_vector_add( point_to_curve, temp );
+          temp = sdf_vector_scale( cC, factor );
+          point_to_curve = sdf_vector_add( point_to_curve, temp );
+          point_to_curve = sdf_vector_add( point_to_curve, dD );
+
+          length = sdf_vector_length( point_to_curve );
+
+          if ( length < min_distance )
+          {
+            min_distance = length;
+            min_factor = factor;
+            nearest_point = sdf_vector_add( point_to_curve, p );
+          }
+
+          /* calculate B`( t ) = 3t^2( A ) + 2t( B ) + C  */
+          d1 = sdf_vector_scale( aA, 3.0f * factor2 );
+          temp = sdf_vector_scale( bB, 2.0f * factor );
+          d1 = sdf_vector_add( d1, temp );
+          d1 = sdf_vector_add( d1, cC );
+
+          /* calculate B``( t ) = 6t( A ) + 2B  */
+          d2 = sdf_vector_scale( aA, 3.0f * factor );
+          d2 = sdf_vector_add( d2, bB );
+          d2 = sdf_vector_scale( d2, 2.0f );
+
+          /* improve factor using                          */
+          /*    t -= P( t ).B`( t ) /                      */
+          /*         ( B`( t ).B`( t ) + P( t ).B``( t ) ) */
+          factor -=   sdf_vector_dot( point_to_curve, d1 ) /
+                    ( sdf_vector_dot( d1, d1 ) +
+                      sdf_vector_dot( point_to_curve, d2 ) );
+
+          if ( factor > 1.0f || factor < 0.0f )
+          {
+            break;
+          }
+        }
+      }
+
+      *shortest_point = nearest_point;
+
+      /* calculate direction of shortest point on the curve using  */
+      /* B`( t ) = 3t^2( A ) + 2t( B ) + C                         */
+      *curve_dir = sdf_vector_scale( aA, 3.0f * min_factor * min_factor );
+      temp = sdf_vector_scale( bB, 2 * min_factor );
+      *curve_dir = sdf_vector_add( *curve_dir, temp );
+      *curve_dir = sdf_vector_add( *curve_dir, cC );
+      break;
     }
     default:
       error = FT_THROW( Invalid_Argument );

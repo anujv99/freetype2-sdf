@@ -124,33 +124,6 @@ FT_BEGIN_HEADER
                         float  d,
                         float  out[3] );
 
-
-  /* solve a quartic equation ( ax^4 + bx^3 + cx^2 + dx + e = 0 )   */
-  /* and return the number of roots. the roots are written to `out' */
-  FT_LOCAL( FT_UShort )
-  solve_quartic_equation( float  a,
-                          float  b,
-                          float  c,
-                          float  d,
-                          float  e,
-                          float  out[4] );
-
-
-  /* solve a 5th degree polynomial equation of form :             */
-  /* ax^5 + bx^4 + cx^3 + dx^2 + ex + f = 0 and return the number */
-  /*  of roots. Only the roots within the range [`min', `max']    */
-  /*  are calculated. the roots are written to `out'.             */
-  FT_LOCAL( FT_UShort )
-  solve_quintic_equation( float  a,
-                          float  b,
-                          float  c,
-                          float  d,
-                          float  e,
-                          float  f,
-                          float  min,
-                          float  max,
-                          float  out[5] );
-
   /* returns the magnitude of a vector */
   FT_LOCAL( float )
   sdf_vector_length( SDF_Vector  vector );

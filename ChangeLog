@@ -1,4 +1,23 @@
+2020-05-27  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] finished the algorithm which return shortest
+	distance from a point to line and quadratic/cubic bezier curve.
+
+	* sdfgen.c (solve_quintic_equation, solve_quartic_equation):
+	  removed becuase no longer using.
+	* sdfgen.c (get_min_distance): changed the process for calculating
+	  shortest distance from a point to a cubic bezier.
+	  At first the process was to calculate the roots of a 5th degree
+	  polynomial, but it was rather slow and did not yeild proper
+	  results.
+	  So, now the function first assumes the point which is nearest
+	  to the cubci curve and then improve is using Newton-Raphson's
+	  method.
+	  The function is now complete and return shortest distance as
+	  well as the direction at the nearest from all three curves.
+
 2020-05-25  Anuj Verma  <anujv@iitbhilai.ac.in>
+
 	* sdfgen.c (solve_quintic_equation): finished the algorithm to
 	  compute roots of a 5th degree polynomial equation. First the
 	  ranges in which the roots lie are calculated using isolator
