@@ -15,6 +15,12 @@
 
 #define FT_26DOT6_TO_FLOAT( x )  ( (float)x / 64.0f )
 
+#define EPSILON 0.000001f
+
+  /* used to initialize vectors */
+  static
+  const SDF_Vector  zero_vector = { 0.0f, 0.0f };
+
   static SDF_Vector
   FT_To_SDF_Vec( FT_Vector  vec )
   {
@@ -32,8 +38,10 @@
                    FT_Bitmap   *abitmap )
   {
     SDF_Shape  shape;
-    FT_Error   error = FT_Err_Ok;
-
+    FT_Error   error   = FT_Err_Ok;
+                       
+    FT_UInt    width   = abitmap->width;
+    FT_UInt    height  = abitmap->rows;
 
     if ( !library )
       return FT_THROW( Invalid_Library_Handle );
@@ -50,55 +58,137 @@
     if ( error != FT_Err_Ok )
       goto Exit;
 
-    float max_dist = 0.0f;
-    
-    float * buffer = NULL;
-    FT_Memory memory = library->memory;
-    FT_MEM_ALLOC( buffer, abitmap->rows * abitmap->width * sizeof( float ) );
-
-    for ( int j = 0; j < abitmap->rows; j++ )
+    /* now loop through all the pixels and determine the shortest   */
+    /* distance from the pixel's position to the nearest edge       */
     {
-      for ( int i = 0; i < abitmap->width; i++ )
+      FT_Memory  memory       = library->memory;
+      FT_UInt    i            = 0u;
+      FT_UInt    j            = 0u;
+
+      float*     temp_buffer  = NULL;
+      float      max_udist    = 0.0f; /* used to normalize values   */
+
+
+      FT_MEM_ALLOC( temp_buffer, width * height * sizeof( float ) );
+
+      for ( j = 0; j < height; j++ )
       {
-        
-        SDF_Contour * head = shape.contour_head;
-        float min_dist = FLT_MAX;
-        SDF_Vector point;
-        point.x = ( float )i;
-        point.y = ( float )abitmap->rows - ( float )j;
-
-        while ( head != NULL )
+        for ( i = 0; i < width; i++ )
         {
-          float length = 0.0f;
-          SDF_Vector shrt;
-          SDF_Vector dir;
+          SDF_Contour*          head;        /* used to iterate            */
+          SDF_Vector            current_pos; /* current pixel position     */
+          SDF_Signed_Distance   min_dist;    /* shortest signed distance   */
+          float                 min_udist;   /* shortest unsigned distance */
 
-          get_min_distance( head, point, &shrt, &dir );
 
-          length = sdf_vector_length( sdf_vector_sub( shrt, point ) );
+          head                    = shape.contour_head;
+          current_pos.x           = ( float )i;
+          current_pos.y           = ( float )height - ( float )j;
+          min_udist               = FLT_MAX;
+          min_dist.direction      = zero_vector;
+          min_dist.nearest_point  = zero_vector;
 
-          if ( length < min_dist )
-            min_dist = length;
+          /* currently we use a brute force algoritm to compute */
+          /* shortest distance from all the curves              */
+          while ( head != NULL )
+          {
+            SDF_Signed_Distance  dist;
+            float                udist;
 
-          head = head->next;
+
+            error = get_min_distance( head, current_pos, &dist );
+            if ( error != FT_Err_Ok )
+              goto Exit1;
+
+            udist = sdf_vector_length( 
+                      sdf_vector_sub( dist.nearest_point, current_pos ) );
+
+            if ( udist - min_udist < -EPSILON )
+            {
+              /* the two distances are fairly apart */
+              min_udist = udist;
+              min_dist = dist;
+            }
+            else if ( fabs( udist - min_udist ) <= EPSILON )
+            {
+              /* the two distances are pretty close, in this case */
+              /* the endpoints might be connected and that is the */
+              /* shortest distance                                */
+              SDF_Vector  temp          = zero_vector;
+              SDF_Vector  middle_dir    = zero_vector;
+              SDF_Vector  p_to_c        = zero_vector; /* point to curve */
+
+              float       dir1 = 0.0f;
+              float       dir2 = 0.0f;
+              float       dir3 = 0.0f;
+
+
+              temp = sdf_vector_sub( dist.nearest_point,
+                                     min_dist.nearest_point );
+              if ( sdf_vector_length( temp ) <= EPSILON )
+              {
+                /* the nearest point is the endpoint and since two    */
+                /* enpoint are connected we are getting two distance. */
+                /* but both curves might have opposite direction, so  */
+                /* now we have to determine the correct direction     */
+
+                /* first check if the two directions are opposite     */
+                p_to_c = sdf_vector_sub( dist.nearest_point, current_pos );
+
+                dir1 = sdf_vector_cross( p_to_c, dist.direction );
+                dir2 = sdf_vector_cross( p_to_c, min_dist.direction );
+
+                if ( dir1 * dir2 <= 0.0f )
+                {
+                  /* they are opposite */
+                  /* now compute the vector that is in between both   */
+                  /* the direction and then determine direction of    */
+                  /* `p_to_c' to that vector                          */
+
+                  middle_dir = sdf_vector_add( dist.direction,
+                                               min_dist.direction );
+
+                  dir3 = sdf_vector_cross( p_to_c, middle_dir );
+
+                  /* now take the signed distance which makes same */
+                  /* directions as `dir3'                          */
+                  if ( dir1 * dir3 > 0.0f )
+                  {
+                    min_udist = udist;
+                    min_dist = dist;
+                  }
+                }
+              }
+            }
+
+            head = head->next;
+          }
+
+          if ( min_udist > max_udist )
+            max_udist = min_udist;
+
+          /* determine the sign */
+          if ( sdf_vector_cross( 
+                 sdf_vector_sub( min_dist.nearest_point, current_pos ),
+                 min_dist.direction ) > 0)
+            temp_buffer[j * width + i] = -min_udist; /* outside */
+          else
+            temp_buffer[j * width + i] = min_udist;  /* inside  */
         }
-
-        if ( min_dist > max_dist )
-          max_dist = min_dist;
-
-        buffer[j * abitmap->width + i] = min_dist;
       }
+
+      /* normalize the values and put in the buffer */
+      for ( i = 0; i < width * height; i++ )
+      {
+        /* normalize */
+        temp_buffer[i] /= max_udist;
+
+        abitmap->buffer[i] = ( fabs( temp_buffer[i] ) ) * 255;
+      }
+
+      Exit1:
+      FT_MEM_FREE( temp_buffer );
     }
-
-    for ( int i = 0; i < abitmap->rows * abitmap->width; i++ )
-    {
-      buffer[i] /= max_dist;
-      buffer[i] = 1.0f - buffer[i];
-
-      abitmap->buffer[i] = ( unsigned char )( buffer[i] * 255.0f );
-    }
-
-    FT_MEM_FREE( buffer );
 
     Exit:
     SDF_Shape_Done( &shape );
@@ -113,15 +203,12 @@
    */
 
   static
-  const SDF_Vector zero_vector       = { 0.0f, 0.0f };
-
-  static
-  const SDF_Contour null_sdf_contour = { { 0.0f, 0.0f }, { 0.0f, 0.0f },
+  const SDF_Contour  null_sdf_contour = { { 0.0f, 0.0f }, { 0.0f, 0.0f },
                                          { 0.0f, 0.0f }, { 0.0f, 0.0f },
                                          SDF_CONTOUR_TYPE_NONE, NULL };
 
   static
-  const SDF_Shape null_sdf_shape     = { { 0.0f, 0.0f }, NULL, 0u };
+  const SDF_Shape  null_sdf_shape     = { { 0.0f, 0.0f }, NULL, 0u };
 
   FT_LOCAL_DEF( void )
   SDF_Contour_Init( SDF_Contour  *contour )
@@ -560,17 +647,16 @@
   }
 
   FT_LOCAL_DEF( FT_Error )
-  get_min_distance( SDF_Contour*       contour,
-                    const SDF_Vector   point,
-                    SDF_Vector        *shortest_point,
-                    SDF_Vector        *curve_dir )
+  get_min_distance( SDF_Contour*          contour,
+                    const SDF_Vector      point,
+                    SDF_Signed_Distance  *out )
   {
     /* compute shortest distance from `point' to the `contour' */
 
     FT_Error  error = FT_Err_Ok;
 
 
-    if ( !contour || !shortest_point )
+    if ( !contour || !out )
       return FT_THROW( Invalid_Argument );
 
     switch ( contour->contour_type ) {
@@ -631,7 +717,8 @@
       /* shortest distance will be from `point' to any of the endpoint */
       if ( sdf_vector_equal( a, b ) == 1 )
       {
-        *shortest_point = a;
+        out->nearest_point = a;
+        out->direction = sdf_vector_normalize( line_segment );
         break;
       }
 
@@ -642,8 +729,8 @@
       nearest_point = sdf_vector_scale( line_segment, factor );
       nearest_point = sdf_vector_add( a, nearest_point );
 
-      *shortest_point = nearest_point;
-      *curve_dir = sdf_vector_normalize( line_segment );
+      out->nearest_point = nearest_point;
+      out->direction = sdf_vector_normalize( line_segment );
 
       break;
     }
@@ -697,6 +784,7 @@
       SDF_Vector  aA             = zero_vector; /* A in the above comment */
       SDF_Vector  bB             = zero_vector; /* B in the above comment */
       SDF_Vector  nearest_point  = zero_vector;
+      SDF_Vector  temp           = zero_vector;
 
       SDF_Vector  p0             = contour->start_pos;
       SDF_Vector  p1             = contour->control_point_a;
@@ -749,7 +837,6 @@
         float  dist                 = 0.0f;
         
         SDF_Vector curve_point      = zero_vector;  /* point on the curve */
-        SDF_Vector temp             = zero_vector;
 
 
         /* only check of t in range [0.0f, 1.0f] */
@@ -774,14 +861,15 @@
         }
       }
 
-      *shortest_point = nearest_point;
+      out->nearest_point = nearest_point;
       
       /* calculate direction of shortest point on the curve using  */
       /* B`( t ) = 2( tA + B )                                     */
-      *curve_dir = sdf_vector_scale( aA, np_factor );
-      *curve_dir = sdf_vector_add( *curve_dir, bB );
-      *curve_dir = sdf_vector_scale( *curve_dir, 2.0f );
-      *curve_dir = sdf_vector_normalize( *curve_dir );
+      temp = sdf_vector_scale( aA, np_factor );
+      temp = sdf_vector_add( temp, bB );
+      temp = sdf_vector_scale( temp, 2.0f );
+      temp = sdf_vector_normalize( temp );
+      out->direction = temp;
       break;
     }
     case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
@@ -950,14 +1038,15 @@
         }
       }
 
-      *shortest_point = nearest_point;
+      out->nearest_point = nearest_point;
 
       /* calculate direction of shortest point on the curve using  */
       /* B`( t ) = 3t^2( A ) + 2t( B ) + C                         */
-      *curve_dir = sdf_vector_scale( aA, 3.0f * min_factor * min_factor );
+      out->direction = sdf_vector_scale( aA, 
+                                         3.0f * min_factor * min_factor );
       temp = sdf_vector_scale( bB, 2 * min_factor );
-      *curve_dir = sdf_vector_add( *curve_dir, temp );
-      *curve_dir = sdf_vector_add( *curve_dir, cC );
+      out->direction = sdf_vector_add( out->direction, temp );
+      out->direction = sdf_vector_add( out->direction, cC );
       break;
     }
     default:

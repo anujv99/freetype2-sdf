@@ -13,7 +13,7 @@ FT_BEGIN_HEADER
   /* output: abitmap           */
   FT_EXPORT( FT_Error )
   FT_Generate_SDF( FT_Library   library,
-                   FT_Outline*  outline, 
+                   FT_Outline*  outline,
                    FT_Bitmap   *abitmap );
 
   
@@ -32,6 +32,14 @@ FT_BEGIN_HEADER
     float  y;
 
   } SDF_Vector;
+
+  /* can be used to determine weather the point is */
+  /* inside or outside the shape's outline         */
+  typedef struct SDF_Signed_Distance_
+  {
+    SDF_Vector  nearest_point;  /* point on curve                    */
+    SDF_Vector  direction;      /* direction of curve on above point */
+  } SDF_Signed_Distance;
 
   /* enumeration for the types of contour present in FT_Outline */
   typedef enum  SDF_Contour_Type_
@@ -167,13 +175,12 @@ FT_BEGIN_HEADER
   sdf_vector_equal( SDF_Vector  a,
                     SDF_Vector  b );
 
-  /* function returns the point on the contour which is at    */
-  /* least distance from the `point'                          */
+  /* returns the signed distance of a point on the curve `contour' */
+  /* that is nearest to `point'                                    */
   FT_LOCAL( FT_Error )
-  get_min_distance( SDF_Contour*       contour,
-                    const SDF_Vector   point,
-                    SDF_Vector        *shortest_point,
-                    SDF_Vector        *curve_dir );
+  get_min_distance( SDF_Contour*          contour,
+                    const SDF_Vector      point,
+                    SDF_Signed_Distance  *out );
 
 FT_END_HEADER
 

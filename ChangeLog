@@ -1,3 +1,11 @@
+2020-05-28  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] finished the algorithm for generating signed
+	distnce fields from `FT_Outline'.
+
+	* sdfgen.c (get_min_distance): combined the output of the function
+	  to a struct `SDF_Signed_Distance'.
+
 2020-05-27  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] finished the algorithm which return shortest
