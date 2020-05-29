@@ -1,3 +1,14 @@
+2020-05-29  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] replaced all `float' by a typedef `SDF_DataType'
+
+	* sdfgen.c (Generate_SDF): fixed a calculation error while
+	  white resolving conflict between two endpoints.
+	  Now if two curves are equidistant from a point we check if
+	  thier endpoints are connected and then use the curve which
+	  make higher orthogonality with the point to correctly determine
+	  the sign of the point.
+
 2020-05-28  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] finished the algorithm for generating signed

@@ -3,20 +3,24 @@
 #define SDFGEN_H_
 
 #include <ft2build.h>
+#include FT_FREETYPE_H
 #include FT_OUTLINE_H
 #include FT_BITMAP_H
 
 FT_BEGIN_HEADER
 
+  /* data type used for computting signed distance fields */
+  typedef float  SDF_DataType;
+
   /* generate sdf from outline */
   /* input: library, outline   */
   /* output: abitmap           */
   FT_EXPORT( FT_Error )
-  FT_Generate_SDF( FT_Library   library,
-                   FT_Outline*  outline,
-                   FT_Bitmap   *abitmap );
+  Generate_SDF( FT_Library     library,
+                FT_GlyphSlot   glyph,
+                FT_Bitmap     *abitmap );
 
-  
+
   /* Private Stuff */
 
   /**************************************************************************
@@ -25,11 +29,11 @@ FT_BEGIN_HEADER
    *
    */
 
-  /* float vector */
+  /* SDF_DataType vector */
   typedef struct  SDF_Vector_
   {
-    float  x;
-    float  y;
+    SDF_DataType  x;
+    SDF_DataType  y;
 
   } SDF_Vector;
 
@@ -110,34 +114,34 @@ FT_BEGIN_HEADER
    */
 
   /* function to clamp the input value between min and max */
-  FT_LOCAL( float )
-  clamp( float  input,
-         float  min,
-         float  max );
+  FT_LOCAL( SDF_DataType )
+  clamp( SDF_DataType  input,
+         SDF_DataType  min,
+         SDF_DataType  max );
 
   /* solve a quadratic equation ( ax^2 + bx + c = 0; ) and return */
   /* the number of roots. the roots are written to `out'.         */
   FT_LOCAL( FT_UShort )
-  solve_quadratic_equation( float  a,
-                            float  b,
-                            float  c,
-                            float  out[2] );
+  solve_quadratic_equation( SDF_DataType  a,
+                            SDF_DataType  b,
+                            SDF_DataType  c,
+                            SDF_DataType  out[2] );
 
   /* solve a cubic equation ( ax^3 + bx^2 + cx + d = 0; ) and     */
   /* return the number of roots. the roots are written to `out'.  */
   FT_LOCAL( FT_UShort )
-  solve_cubic_equation( float  a,
-                        float  b,
-                        float  c,
-                        float  d,
-                        float  out[3] );
+  solve_cubic_equation( SDF_DataType  a,
+                        SDF_DataType  b,
+                        SDF_DataType  c,
+                        SDF_DataType  d,
+                        SDF_DataType  out[3] );
 
   /* returns the magnitude of a vector */
-  FT_LOCAL( float )
+  FT_LOCAL( SDF_DataType )
   sdf_vector_length( SDF_Vector  vector );
 
   /* returns the squared magnitude of a vector */
-  FT_LOCAL( float )
+  FT_LOCAL( SDF_DataType )
   sdf_vector_squared_length( SDF_Vector  vector );
 
   /* returns component wise addition of `a' and `b' */
@@ -152,17 +156,17 @@ FT_BEGIN_HEADER
 
   /* returns component wise multiplication by `scale' */
   FT_LOCAL( SDF_Vector )
-  sdf_vector_scale( SDF_Vector  vector,
-                    float       scale );
+  sdf_vector_scale( SDF_Vector    vector,
+                    SDF_DataType  scale );
 
   /* dot/scalar product of two vector `a' and `b' */
-  FT_LOCAL( float )
+  FT_LOCAL( SDF_DataType )
   sdf_vector_dot( SDF_Vector  a, 
                   SDF_Vector  b );
 
-  /* corss/vector product of two vector `a' and `b'. */
+  /* cross/vector product of two vector `a' and `b'. */
   /* the cross product will be in the z-axis.        */
-  FT_LOCAL( float )
+  FT_LOCAL( SDF_DataType )
   sdf_vector_cross( SDF_Vector  a,
                     SDF_Vector  b );
 

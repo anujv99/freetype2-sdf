@@ -13,7 +13,7 @@
 
 #include "sdfgen.h"
 
-#define FT_26DOT6_TO_FLOAT( x )  ( (float)x / 64.0f )
+#define FT_26DOT6_TO_FLOAT( x )  ( (SDF_DataType)x / 64.0f )
 
 #define EPSILON 0.000001f
 
@@ -32,29 +32,65 @@
     return out_vec;
   }
 
+  /* the process for generating signed distance field from       */
+  /* outlines is based on the thesis:                            */
+  /* Chlumsky, Viktor.Shape Decomposition for Multi-channel      */
+  /* Distance Fields.Master's thesis. Czech Technical University */
+  /* in Prague, Faculty of InformationTechnology, 2015.          */
+  /* link: https://github.com/Chlumsky/msdfgen                   */
+
   FT_EXPORT_DEF( FT_Error )
-  FT_Generate_SDF( FT_Library   library,
-                   FT_Outline*  outline,
-                   FT_Bitmap   *abitmap )
+  Generate_SDF( FT_Library     library,
+                FT_GlyphSlot   glyph,
+                FT_Bitmap     *abitmap )
   {
     SDF_Shape  shape;
     FT_Error   error   = FT_Err_Ok;
-                       
-    FT_UInt    width   = abitmap->width;
-    FT_UInt    height  = abitmap->rows;
+
+    FT_UInt    width   = 0u;
+    FT_UInt    height  = 0u;
+    FT_BBox    cBox;
+
+    FT_Int     x_shift = 0;
+    FT_Int     y_shift = 0;
+
+    FT_Int     x_pad   = 0;
+    FT_Int     y_pad   = 0;
+
 
     if ( !library )
       return FT_THROW( Invalid_Library_Handle );
 
-    if ( !outline || !abitmap )
+    if ( !glyph || !abitmap || !glyph->face )
       return FT_THROW( Invalid_Argument );
+
+    if ( glyph->format != FT_GLYPH_FORMAT_OUTLINE )
+      return FT_THROW( Invalid_Glyph_Format );
+
+    /* compute the width and height and add padding */
+    FT_Outline_Get_CBox( &glyph->outline, &cBox );
+
+    width = abs( cBox.xMax - cBox.xMin ) / 64;
+    height = abs( cBox.yMax - cBox.yMin ) / 64;
+
+    x_pad = width / 4;
+    y_pad = height / 4;
+
+    width += x_pad;
+    height += y_pad;
+
+    x_shift = glyph->bitmap_left - x_pad / 2;
+    y_shift = glyph->bitmap_top - glyph->bitmap.rows - y_pad / 2;
+
+    /* align the outlne to the grid */
+    FT_Outline_Translate(&glyph->outline, -x_shift * 64, -y_shift * 64);
 
     SDF_Shape_Init( &shape );
     shape.memory = library->memory;
 
     /* decompose the outline and store in into the SDF_Shape struct */
     /* this provide an easier way to iterate through all the curves */
-    error = SDF_Decompose_Outline( outline, &shape );
+    error = SDF_Decompose_Outline( &glyph->outline, &shape );
     if ( error != FT_Err_Ok )
       goto Exit;
 
@@ -65,11 +101,11 @@
       FT_UInt    i            = 0u;
       FT_UInt    j            = 0u;
 
-      float*     temp_buffer  = NULL;
-      float      max_udist    = 0.0f; /* used to normalize values   */
+      SDF_DataType*     temp_buffer  = NULL;
+      SDF_DataType      max_udist    = 0.0f; /* used to normalize values   */
 
 
-      FT_MEM_ALLOC( temp_buffer, width * height * sizeof( float ) );
+      FT_MEM_ALLOC( temp_buffer, width * height * sizeof( SDF_DataType ) );
 
       for ( j = 0; j < height; j++ )
       {
@@ -78,22 +114,23 @@
           SDF_Contour*          head;        /* used to iterate            */
           SDF_Vector            current_pos; /* current pixel position     */
           SDF_Signed_Distance   min_dist;    /* shortest signed distance   */
-          float                 min_udist;   /* shortest unsigned distance */
+          SDF_DataType          min_udist;   /* shortest unsigned distance */
 
 
           head                    = shape.contour_head;
-          current_pos.x           = ( float )i;
-          current_pos.y           = ( float )height - ( float )j;
+          current_pos.x           = ( SDF_DataType )i;
+          current_pos.y           = ( SDF_DataType )height -
+                                    ( SDF_DataType )j;
           min_udist               = FLT_MAX;
           min_dist.direction      = zero_vector;
           min_dist.nearest_point  = zero_vector;
 
-          /* currently we use a brute force algoritm to compute */
-          /* shortest distance from all the curves              */
+          /* currently we use a brute force algorithm to compute */
+          /* shortest distance from all the curves               */
           while ( head != NULL )
           {
             SDF_Signed_Distance  dist;
-            float                udist;
+            SDF_DataType         udist;
 
 
             error = get_min_distance( head, current_pos, &dist );
@@ -103,24 +140,24 @@
             udist = sdf_vector_length( 
                       sdf_vector_sub( dist.nearest_point, current_pos ) );
 
-            if ( udist - min_udist < -EPSILON )
+            if ( fabs( min_udist ) - fabs( udist ) > EPSILON )
             {
               /* the two distances are fairly apart */
               min_udist = udist;
               min_dist = dist;
             }
-            else if ( fabs( udist - min_udist ) <= EPSILON )
+            else
             {
               /* the two distances are pretty close, in this case */
               /* the endpoints might be connected and that is the */
               /* shortest distance                                */
               SDF_Vector  temp          = zero_vector;
-              SDF_Vector  middle_dir    = zero_vector;
               SDF_Vector  p_to_c        = zero_vector; /* point to curve */
 
-              float       dir1 = 0.0f;
-              float       dir2 = 0.0f;
-              float       dir3 = 0.0f;
+              SDF_DataType  dir1        = 0.0f;
+              SDF_DataType  dir2        = 0.0f;
+              SDF_DataType  ortho1      = 0.0f;
+              SDF_DataType  ortho2      = 0.0f;
 
 
               temp = sdf_vector_sub( dist.nearest_point,
@@ -140,19 +177,19 @@
 
                 if ( dir1 * dir2 <= 0.0f )
                 {
-                  /* they are opposite */
-                  /* now compute the vector that is in between both   */
-                  /* the direction and then determine direction of    */
-                  /* `p_to_c' to that vector                          */
+                  /* the two directions are opposite so simply take   */
+                  /* one with higher orthogonality                    */
+                  p_to_c = sdf_vector_normalize( p_to_c );
 
-                  middle_dir = sdf_vector_add( dist.direction,
-                                               min_dist.direction );
+                  ortho1 = sdf_vector_cross( dist.direction, p_to_c );
+                  ortho2 = sdf_vector_cross( min_dist.direction, p_to_c );
 
-                  dir3 = sdf_vector_cross( p_to_c, middle_dir );
+                  ortho1 = fabs( ortho1 );
+                  ortho2 = fabs( ortho2 );
 
                   /* now take the signed distance which makes same */
                   /* directions as `dir3'                          */
-                  if ( dir1 * dir3 > 0.0f )
+                  if ( ortho1 > ortho2 )
                   {
                     min_udist = udist;
                     min_dist = dist;
@@ -177,13 +214,25 @@
         }
       }
 
+      /* release the previous buffer */
+      FT_Bitmap_Done( library, abitmap );
+
+      abitmap->width       = width;
+      abitmap->rows        = height;
+      abitmap->pitch       = width;
+      abitmap->num_grays   = 256;
+      abitmap->pixel_mode  = FT_PIXEL_MODE_GRAY;
+
+      FT_MEM_ALLOC( abitmap->buffer, width * height );
+
       /* normalize the values and put in the buffer */
       for ( i = 0; i < width * height; i++ )
       {
-        /* normalize */
-        temp_buffer[i] /= max_udist;
+        temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
+        temp_buffer[i] += 1.0f;
+        temp_buffer[i] /= 2.0f;
 
-        abitmap->buffer[i] = ( fabs( temp_buffer[i] ) ) * 255;
+        abitmap->buffer[i] = ( temp_buffer[i] ) * 255;
       }
 
       Exit1:
@@ -191,6 +240,7 @@
     }
 
     Exit:
+    FT_Outline_Translate(&glyph->outline, x_shift * 64, y_shift * 64);
     SDF_Shape_Done( &shape );
     return error;
   }
@@ -204,8 +254,8 @@
 
   static
   const SDF_Contour  null_sdf_contour = { { 0.0f, 0.0f }, { 0.0f, 0.0f },
-                                         { 0.0f, 0.0f }, { 0.0f, 0.0f },
-                                         SDF_CONTOUR_TYPE_NONE, NULL };
+                                          { 0.0f, 0.0f }, { 0.0f, 0.0f },
+                                          SDF_CONTOUR_TYPE_NONE, NULL };
 
   static
   const SDF_Shape  null_sdf_shape     = { { 0.0f, 0.0f }, NULL, 0u };
@@ -405,12 +455,12 @@
    *
    */
 
-  FT_LOCAL_DEF( float )
-  clamp( float   input,
-         float   min,
-         float   max )
+  FT_LOCAL_DEF( SDF_DataType )
+  clamp( SDF_DataType   input,
+         SDF_DataType   min,
+         SDF_DataType   max )
   {
-    float  output = input;
+    SDF_DataType  output = input;
 
 
     if ( output < min )
@@ -422,13 +472,13 @@
   }
 
   FT_LOCAL_DEF( FT_UShort )
-  solve_quadratic_equation( float  a,
-                            float  b,
-                            float  c,
-                            float  out[2] )
+  solve_quadratic_equation( SDF_DataType  a,
+                            SDF_DataType  b,
+                            SDF_DataType  c,
+                            SDF_DataType  out[2] )
   {
-    float  discriminant       = 0.0f;
-    float  discriminant_root  = 0.0f;
+    SDF_DataType  discriminant       = 0.0f;
+    SDF_DataType  discriminant_root  = 0.0f;
 
 
     /* if a == 0.0f then the equation is linear */
@@ -476,23 +526,23 @@
   }
 
   FT_LOCAL_DEF( FT_UShort )
-  solve_cubic_equation( float a,
-                        float b,
-                        float c,
-                        float d,
-                        float out[3] )
+  solve_cubic_equation( SDF_DataType a,
+                        SDF_DataType b,
+                        SDF_DataType c,
+                        SDF_DataType d,
+                        SDF_DataType out[3] )
   {
     /* the method here is a direct implementation of the  */
     /* `Cardano's Cubic formula' given here               */
     /* https://mathworld.wolfram.com/CubicFormula.html    */
 
-    float  q              = 0.0f;  /* intermediate      */
-    float  r              = 0.0f;  /* intermediate      */
-    float  discriminant   = 0.0f;  /* discriminant      */
+    SDF_DataType  q              = 0.0f;  /* intermediate      */
+    SDF_DataType  r              = 0.0f;  /* intermediate      */
+    SDF_DataType  discriminant   = 0.0f;  /* discriminant      */
 
-    float  a2             = b;     /* x^2 coefficients  */
-    float  a1             = c;     /* x coefficients    */
-    float  a0             = d;     /* constant          */
+    SDF_DataType  a2             = b;     /* x^2 coefficients  */
+    SDF_DataType  a1             = c;     /* x coefficients    */
+    SDF_DataType  a0             = d;     /* constant          */
 
     if ( a == 0 )
     {
@@ -514,7 +564,7 @@
 
     if ( discriminant < 0.0f )
     { 
-      float  t = 0.0f;  /* angle theta */
+      SDF_DataType  t = 0.0f;  /* angle theta */
 
 
       /* all real unequal roots */
@@ -529,7 +579,7 @@
     }
     else if ( discriminant == 0.0f )
     {
-      float  s = 0.0f;  /* intermediate */
+      SDF_DataType  s = 0.0f;  /* intermediate */
 
 
       /* all real roots and at least two are equal */
@@ -542,8 +592,8 @@
     }
     else /* discriminant > 0.0f */
     {
-      float  s = 0.0f;  /* intermediate */
-      float  t = 0.0f;  /* intermediate */
+      SDF_DataType  s = 0.0f;  /* intermediate */
+      SDF_DataType  t = 0.0f;  /* intermediate */
 
 
       /* only one real root */
@@ -558,13 +608,13 @@
 
   }
 
-  FT_LOCAL_DEF( float )
+  FT_LOCAL_DEF( SDF_DataType )
   sdf_vector_length( SDF_Vector  vector )
   {
     return sqrtf( ( vector.x * vector.x ) + ( vector.y * vector.y ) );
   }
 
-  FT_LOCAL_DEF( float )
+  FT_LOCAL_DEF( SDF_DataType )
   sdf_vector_squared_length( SDF_Vector  vector )
   {
     return ( ( vector.x * vector.x ) + ( vector.y * vector.y ) );
@@ -599,8 +649,8 @@
   FT_LOCAL_DEF( SDF_Vector )
   sdf_vector_normalize( SDF_Vector  vector )
   {
-    SDF_Vector  output;
-    float       vector_length = sdf_vector_length( vector );
+    SDF_Vector    output;
+    SDF_DataType  vector_length = sdf_vector_length( vector );
 
 
     output.x = vector.x / vector_length;
@@ -610,8 +660,8 @@
   }
 
   FT_LOCAL_DEF( SDF_Vector )
-  sdf_vector_scale( SDF_Vector  vector,
-                    float       scale )
+  sdf_vector_scale( SDF_Vector    vector,
+                    SDF_DataType  scale )
   {
     SDF_Vector  output;
 
@@ -622,14 +672,14 @@
     return output;
   }
 
-  FT_LOCAL_DEF( float )
+  FT_LOCAL_DEF( SDF_DataType )
   sdf_vector_dot( SDF_Vector  a, 
                   SDF_Vector  b )
   {
     return ( ( a.x * b.x ) + ( a.y * b.y ) );
   }
 
-  FT_LOCAL_DEF( float )
+  FT_LOCAL_DEF( SDF_DataType )
   sdf_vector_cross( SDF_Vector  a,
                     SDF_Vector  b )
   {
@@ -708,9 +758,9 @@
 
       SDF_Vector        nearest_point           = zero_vector;
 
-      float             segment_squared_length  = 0.0f;
-      float             factor                  = 0.0f;
-      float             sign                    = 0.0f;
+      SDF_DataType      segment_squared_length  = 0.0f;
+      SDF_DataType      factor                  = 0.0f;
+      SDF_DataType      sign                    = 0.0f;
 
 
       /* if both the endpoints of the line segmnet coincide then the   */
@@ -781,30 +831,30 @@
       /*                                                             */
       /* [note]: B and B( t ) are different in the above equations   */
 
-      SDF_Vector  aA             = zero_vector; /* A in the above comment */
-      SDF_Vector  bB             = zero_vector; /* B in the above comment */
-      SDF_Vector  nearest_point  = zero_vector;
-      SDF_Vector  temp           = zero_vector;
-
-      SDF_Vector  p0             = contour->start_pos;
-      SDF_Vector  p1             = contour->control_point_a;
-      SDF_Vector  p2             = contour->end_pos;
-      SDF_Vector  p              = point;
+      SDF_Vector    aA             = zero_vector; /* A in above comment */
+      SDF_Vector    bB             = zero_vector; /* B in above comment */
+      SDF_Vector    nearest_point  = zero_vector;
+      SDF_Vector    temp           = zero_vector;
+                    
+      SDF_Vector    p0             = contour->start_pos;
+      SDF_Vector    p1             = contour->control_point_a;
+      SDF_Vector    p2             = contour->end_pos;
+      SDF_Vector    p              = point;
 
       /* cubic coefficients */
-      float       a         = 0.0f;
-      float       b         = 0.0f;
-      float       c         = 0.0f;
-      float       d         = 0.0f;
-      float       min       = FLT_MAX; /* shortest distace */
+      SDF_DataType  a         = 0.0f;
+      SDF_DataType  b         = 0.0f;
+      SDF_DataType  c         = 0.0f;
+      SDF_DataType  d         = 0.0f;
+      SDF_DataType  min       = FLT_MAX; /* shortest distace */
                             
-      float       roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      SDF_DataType  roots[5]  = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
       /* factor `t' of the shortest point on curve */
-      float       np_factor = 0.0f;
+      SDF_DataType  np_factor = 0.0f;
 
-      FT_UShort   num_r     = 0;   /* number of roots */
-      FT_UShort   i         = 0;
+      FT_UShort     num_r     = 0;   /* number of roots */
+      FT_UShort     i         = 0;
 
 
       aA = sdf_vector_add( p0, p2 );
@@ -832,9 +882,9 @@
 
       for ( i = 0; i < num_r; i++ )
       {
-        float  t                    = roots[i];
-        float  t2                   = t * t;
-        float  dist                 = 0.0f;
+        SDF_DataType  t             = roots[i];
+        SDF_DataType  t2            = t * t;
+        SDF_DataType  dist          = 0.0f;
         
         SDF_Vector curve_point      = zero_vector;  /* point on the curve */
 
@@ -941,24 +991,24 @@
       /*                                                             */
       /* [note]: B and B( t ) are different in the above equations   */
 
-      SDF_Vector  aA             = zero_vector; /* A in the above comment */
-      SDF_Vector  bB             = zero_vector; /* B in the above comment */
-      SDF_Vector  cC             = zero_vector; /* C in the above comment */
-      SDF_Vector  dD             = zero_vector; /* D in the above comment */
-      SDF_Vector  nearest_point  = zero_vector;
-      SDF_Vector  temp           = zero_vector;
+      SDF_Vector    aA             = zero_vector; /* A in above comment */
+      SDF_Vector    bB             = zero_vector; /* B in above comment */
+      SDF_Vector    cC             = zero_vector; /* C in above comment */
+      SDF_Vector    dD             = zero_vector; /* D in above comment */
+      SDF_Vector    nearest_point  = zero_vector;
+      SDF_Vector    temp           = zero_vector;
+                    
+      SDF_Vector    p0             = contour->start_pos;
+      SDF_Vector    p1             = contour->control_point_a;
+      SDF_Vector    p2             = contour->control_point_b;
+      SDF_Vector    p3             = contour->end_pos;
+      SDF_Vector    p              = point;
 
-      SDF_Vector  p0             = contour->start_pos;
-      SDF_Vector  p1             = contour->control_point_a;
-      SDF_Vector  p2             = contour->control_point_b;
-      SDF_Vector  p3             = contour->end_pos;
-      SDF_Vector  p              = point;
-
-      float       min_distance   = FLT_MAX;
-      float       min_factor     = 0.0f;
+      SDF_DataType  min_distance   = FLT_MAX;
+      SDF_DataType  min_factor     = 0.0f;
       
-      FT_UShort   iterations     = 0;
-      FT_UShort   steps          = 0;
+      FT_UShort     iterations     = 0;
+      FT_UShort     steps          = 0;
 
       const FT_UShort  MAX_STEPS      = 4;
       const FT_UShort  MAX_DIVISIONS  = 4;
@@ -981,14 +1031,15 @@
 
       for ( iterations = 0; iterations <= MAX_DIVISIONS; iterations++ )
       {
-        float       factor  = ( float )iterations / ( float )MAX_DIVISIONS;
-        float       factor2 = 0.0f;
-        float       factor3 = 0.0f;
-        float       length  = 0.0f;
+        SDF_DataType  factor  = ( SDF_DataType )iterations /
+                                ( SDF_DataType )MAX_DIVISIONS;
+        SDF_DataType  factor2 = 0.0f;
+        SDF_DataType  factor3 = 0.0f;
+        SDF_DataType  length  = 0.0f;
 
-        SDF_Vector point_to_curve  = zero_vector;  /* P( t ) above      */
-        SDF_Vector d1              = zero_vector;  /* first derivative  */
-        SDF_Vector d2              = zero_vector;  /* second derivative */
+        SDF_Vector    point_to_curve  = zero_vector;  /* P( t ) above      */
+        SDF_Vector    d1              = zero_vector;  /* first derivative  */
+        SDF_Vector    d2              = zero_vector;  /* second derivative */
 
 
         for ( steps = 0; steps < MAX_STEPS; steps++ )
@@ -1047,6 +1098,7 @@
       temp = sdf_vector_scale( bB, 2 * min_factor );
       out->direction = sdf_vector_add( out->direction, temp );
       out->direction = sdf_vector_add( out->direction, cC );
+      out->direction = sdf_vector_normalize( out->direction );
       break;
     }
     default:
