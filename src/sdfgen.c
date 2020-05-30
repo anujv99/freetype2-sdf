@@ -64,8 +64,8 @@
     if ( !glyph || !abitmap || !glyph->face )
       return FT_THROW( Invalid_Argument );
 
-    if ( glyph->format != FT_GLYPH_FORMAT_OUTLINE )
-      return FT_THROW( Invalid_Glyph_Format );
+    //if ( glyph->format != FT_GLYPH_FORMAT_OUTLINE )
+    //  return FT_THROW( Invalid_Glyph_Format );
 
     /* compute the width and height and add padding */
     FT_Outline_Get_CBox( &glyph->outline, &cBox );
@@ -111,13 +111,13 @@
       {
         for ( i = 0; i < width; i++ )
         {
-          SDF_Contour*          head;        /* used to iterate            */
+          SDF_Edge*             head;        /* used to iterate            */
           SDF_Vector            current_pos; /* current pixel position     */
           SDF_Signed_Distance   min_dist;    /* shortest signed distance   */
           SDF_DataType          min_udist;   /* shortest unsigned distance */
 
 
-          head                    = shape.contour_head;
+          head                    = shape.head;
           current_pos.x           = ( SDF_DataType )i;
           current_pos.y           = ( SDF_DataType )height -
                                     ( SDF_DataType )j;
@@ -135,7 +135,7 @@
 
             error = get_min_distance( head, current_pos, &dist );
             if ( error != FT_Err_Ok )
-              goto Exit1;
+              goto Exit;
 
             udist = sdf_vector_length( 
                       sdf_vector_sub( dist.nearest_point, current_pos ) );
@@ -208,9 +208,9 @@
           if ( sdf_vector_cross( 
                  sdf_vector_sub( min_dist.nearest_point, current_pos ),
                  min_dist.direction ) > 0)
-            temp_buffer[j * width + i] = -min_udist; /* outside */
+            temp_buffer[j * width + i] = -0.0f; /* outside */
           else
-            temp_buffer[j * width + i] = min_udist;  /* inside  */
+            temp_buffer[j * width + i] = 1.0f;  /* inside  */
         }
       }
 
@@ -219,24 +219,19 @@
 
       abitmap->width       = width;
       abitmap->rows        = height;
-      abitmap->pitch       = width;
+      abitmap->pitch       = width * sizeof( SDF_DataType );
       abitmap->num_grays   = 256;
-      abitmap->pixel_mode  = FT_PIXEL_MODE_GRAY;
-
-      FT_MEM_ALLOC( abitmap->buffer, width * height );
+      abitmap->pixel_mode  = 0; /* 32 bit floating point */
 
       /* normalize the values and put in the buffer */
       for ( i = 0; i < width * height; i++ )
       {
-        temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
-        temp_buffer[i] += 1.0f;
-        temp_buffer[i] /= 2.0f;
-
-        abitmap->buffer[i] = ( temp_buffer[i] ) * 255;
+        //temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
+        //temp_buffer[i] += 1.0f;
+        //temp_buffer[i] /= 2.0f;
       }
 
-      Exit1:
-      FT_MEM_FREE( temp_buffer );
+      abitmap->buffer = ( unsigned char* )temp_buffer;
     }
 
     Exit:
@@ -253,18 +248,18 @@
    */
 
   static
-  const SDF_Contour  null_sdf_contour = { { 0.0f, 0.0f }, { 0.0f, 0.0f },
-                                          { 0.0f, 0.0f }, { 0.0f, 0.0f },
-                                          SDF_CONTOUR_TYPE_NONE, NULL };
+  const SDF_Edge  null_sdf_edge = { { 0.0f, 0.0f }, { 0.0f, 0.0f },
+                                    { 0.0f, 0.0f }, { 0.0f, 0.0f },
+                                    SDF_EDGE_TYPE_NONE, NULL };
 
   static
   const SDF_Shape  null_sdf_shape     = { { 0.0f, 0.0f }, NULL, 0u };
 
   FT_LOCAL_DEF( void )
-  SDF_Contour_Init( SDF_Contour  *contour )
+  SDF_Edge_Init( SDF_Edge  *edge )
   {
-    if ( contour )
-      *contour = null_sdf_contour;
+    if ( edge )
+      *edge = null_sdf_edge;
   }
 
   FT_LOCAL_DEF( void )
@@ -278,7 +273,7 @@
   SDF_Shape_Done( SDF_Shape  *shape )
   {
     FT_Memory     memory;
-    SDF_Contour*  head;
+    SDF_Edge*     head;
 
     if ( !shape )
       return FT_THROW( Invalid_Argument );
@@ -287,11 +282,11 @@
       return FT_THROW( Invalid_Library_Handle );
 
     memory = shape->memory;
-    head = shape->contour_head;
+    head = shape->head;
 
     while ( head )
     {
-      SDF_Contour*  temp = head;
+      SDF_Edge*  temp = head;
 
 
       head = head->next;
@@ -323,7 +318,7 @@
   {
     SDF_Shape*    shape     = ( SDF_Shape* )user;
     SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
-    SDF_Contour*  contour   = NULL;
+    SDF_Edge*     edge      = NULL;
 
     FT_Memory   memory      = shape->memory;
     FT_Error    error       = FT_Err_Ok;
@@ -332,23 +327,23 @@
     if ( endpoint.x != shape->current_pos.x ||
          endpoint.y != shape->current_pos.y )
     {
-      /* only add contour if current_pos != to */
-      FT_MEM_QNEW( contour );
+      /* only add edge if current_pos != to */
+      FT_MEM_QNEW( edge );
       if (error != FT_Err_Ok)
         return error;
-      SDF_Contour_Init( contour );
+      SDF_Edge_Init( edge );
       
-      contour->start_pos     = shape->current_pos;
-      contour->end_pos       = endpoint;
-      contour->contour_type  = SDF_CONTOUR_TYPE_LINE;
+      edge->start_pos     = shape->current_pos;
+      edge->end_pos       = endpoint;
+      edge->edge_type     = SDF_EDGE_TYPE_LINE;
 
-      /* add the contour to shape */
-      if ( shape->contour_head )
-        contour->next = shape->contour_head;
+      /* add the edge to shape */
+      if ( shape->head )
+        edge->next = shape->head;
 
-      shape->contour_head  = contour;
-      shape->current_pos   = endpoint;
-      shape->num_contours += 1u;
+      shape->head         = edge;
+      shape->current_pos  = endpoint;
+      shape->num_edges    += 1u;
     }
 
     return error;
@@ -362,30 +357,30 @@
     SDF_Shape*    shape     = ( SDF_Shape* )user;
     SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
     SDF_Vector    control   = FT_To_SDF_Vec( *control1 );
-    SDF_Contour*  contour   = NULL;
+    SDF_Edge*     edge      = NULL;
 
     FT_Memory     memory    = shape->memory;
     FT_Error      error     = FT_Err_Ok;
 
 
     /* in conic bezier, to and current_pos can be same */
-    FT_MEM_QNEW( contour );
+    FT_MEM_QNEW( edge );
     if (error != FT_Err_Ok)
         return error;
-    SDF_Contour_Init( contour );
+    SDF_Edge_Init( edge );
 
-    contour->start_pos        = shape->current_pos;
-    contour->end_pos          = endpoint;
-    contour->control_point_a  = control;
-    contour->contour_type     = SDF_CONTOUR_TYPE_QUADRATIC_BEZIER;
+    edge->start_pos        = shape->current_pos;
+    edge->end_pos          = endpoint;
+    edge->control_point_a  = control;
+    edge->edge_type        = SDF_EDGE_TYPE_QUADRATIC_BEZIER;
 
-    /* add the contour to shape */
-    if ( shape->contour_head )
-      contour->next = shape->contour_head;
+    /* add the edge to shape */
+    if ( shape->head )
+      edge->next = shape->head;
 
-    shape->contour_head  = contour;
-    shape->current_pos   = endpoint;
-    shape->num_contours += 1u;
+    shape->head         = edge;
+    shape->current_pos  = endpoint;
+    shape->num_edges    += 1u;
 
     return error;
   }
@@ -400,7 +395,7 @@
     SDF_Vector    endpoint   = FT_To_SDF_Vec( *to );
     SDF_Vector    control_a  = FT_To_SDF_Vec( *control1 );
     SDF_Vector    control_b  = FT_To_SDF_Vec( *control2 );
-    SDF_Contour*  contour    = NULL;
+    SDF_Edge*     edge       = NULL;
 
     FT_Memory     memory     = shape->memory;
     FT_Error      error      = FT_Err_Ok;
@@ -408,24 +403,24 @@
 
     /* in cubic bezier, to and current_pos can be same */
     
-    FT_MEM_QNEW( contour );
+    FT_MEM_QNEW( edge );
     if (error != FT_Err_Ok)
         return error;
-    SDF_Contour_Init( contour );
+    SDF_Edge_Init( edge );
 
-    contour->start_pos        = shape->current_pos;
-    contour->end_pos          = endpoint;
-    contour->control_point_a  = control_a;
-    contour->control_point_b  = control_b;
-    contour->contour_type     = SDF_CONTOUR_TYPE_CUBIC_BEZIER;
+    edge->start_pos        = shape->current_pos;
+    edge->end_pos          = endpoint;
+    edge->control_point_a  = control_a;
+    edge->control_point_b  = control_b;
+    edge->edge_type        = SDF_EDGE_TYPE_CUBIC_BEZIER;
 
-    /* add the contour to shape */
-    if ( shape->contour_head )
-      contour->next = shape->contour_head;
+    /* add the edge to shape */
+    if ( shape->head )
+      edge->next = shape->head;
 
-    shape->contour_head  = contour;
-    shape->current_pos   = endpoint;
-    shape->num_contours += 1u;
+    shape->head         = edge;
+    shape->current_pos  = endpoint;
+    shape->num_edges    += 1u;
 
     return error;
   }
@@ -697,20 +692,20 @@
   }
 
   FT_LOCAL_DEF( FT_Error )
-  get_min_distance( SDF_Contour*          contour,
+  get_min_distance( SDF_Edge*             edge,
                     const SDF_Vector      point,
                     SDF_Signed_Distance  *out )
   {
-    /* compute shortest distance from `point' to the `contour' */
+    /* compute shortest distance from `point' to the `edge' */
 
     FT_Error  error = FT_Err_Ok;
 
 
-    if ( !contour || !out )
+    if ( !edge || !out )
       return FT_THROW( Invalid_Argument );
 
-    switch ( contour->contour_type ) {
-    case SDF_CONTOUR_TYPE_LINE:
+    switch ( edge->edge_type ) {
+    case SDF_EDGE_TYPE_LINE:
     {
       /* in order to calculate the shortest distance from a point to */
       /* a line segment.                                             */
@@ -750,8 +745,8 @@
       /*                                                             */
       /* => finally the distance becomes | point_on_line - p |       */
 
-      const SDF_Vector  a                       = contour->start_pos;
-      const SDF_Vector  b                       = contour->end_pos;
+      const SDF_Vector  a                       = edge->start_pos;
+      const SDF_Vector  b                       = edge->end_pos;
       const SDF_Vector  p                       = point;
       const SDF_Vector  line_segment            = sdf_vector_sub( b, a );
       const SDF_Vector  p_sub_a                 = sdf_vector_sub( p, a );
@@ -784,7 +779,7 @@
 
       break;
     }
-    case SDF_CONTOUR_TYPE_QUADRATIC_BEZIER:
+    case SDF_EDGE_TYPE_QUADRATIC_BEZIER:
     {
       /* the procedure to find the shortest distance from a point to */
       /* a quadratic bezier curve is simliar to a line segment. the  */
@@ -836,9 +831,9 @@
       SDF_Vector    nearest_point  = zero_vector;
       SDF_Vector    temp           = zero_vector;
                     
-      SDF_Vector    p0             = contour->start_pos;
-      SDF_Vector    p1             = contour->control_point_a;
-      SDF_Vector    p2             = contour->end_pos;
+      SDF_Vector    p0             = edge->start_pos;
+      SDF_Vector    p1             = edge->control_point_a;
+      SDF_Vector    p2             = edge->end_pos;
       SDF_Vector    p              = point;
 
       /* cubic coefficients */
@@ -922,7 +917,7 @@
       out->direction = temp;
       break;
     }
-    case SDF_CONTOUR_TYPE_CUBIC_BEZIER:
+    case SDF_EDGE_TYPE_CUBIC_BEZIER:
     {
       /* the procedure to find the shortest distance from a point to */
       /* a cubic bezier curve is simliar to a quadratic curve.       */
@@ -998,10 +993,10 @@
       SDF_Vector    nearest_point  = zero_vector;
       SDF_Vector    temp           = zero_vector;
                     
-      SDF_Vector    p0             = contour->start_pos;
-      SDF_Vector    p1             = contour->control_point_a;
-      SDF_Vector    p2             = contour->control_point_b;
-      SDF_Vector    p3             = contour->end_pos;
+      SDF_Vector    p0             = edge->start_pos;
+      SDF_Vector    p1             = edge->control_point_a;
+      SDF_Vector    p2             = edge->control_point_b;
+      SDF_Vector    p3             = edge->end_pos;
       SDF_Vector    p              = point;
 
       SDF_DataType  min_distance   = FLT_MAX;

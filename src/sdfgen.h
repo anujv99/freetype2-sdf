@@ -45,43 +45,43 @@ FT_BEGIN_HEADER
     SDF_Vector  direction;      /* direction of curve on above point */
   } SDF_Signed_Distance;
 
-  /* enumeration for the types of contour present in FT_Outline */
-  typedef enum  SDF_Contour_Type_
+  /* enumeration for the types of edge present in FT_Outline */
+  typedef enum  SDF_Edge_Type_
   {
-    SDF_CONTOUR_TYPE_NONE              = -1,
-    SDF_CONTOUR_TYPE_LINE              =  0,  /* line type             */
-    SDF_CONTOUR_TYPE_QUADRATIC_BEZIER  =  1,  /* quadratic bezier type */
-    SDF_CONTOUR_TYPE_CUBIC_BEZIER      =  2,  /* cubic bezier type     */
+    SDF_EDGE_TYPE_NONE              = -1,
+    SDF_EDGE_TYPE_LINE              =  0,  /* line type             */
+    SDF_EDGE_TYPE_QUADRATIC_BEZIER  =  1,  /* quadratic bezier type */
+    SDF_EDGE_TYPE_CUBIC_BEZIER      =  2,  /* cubic bezier type     */
 
-    SDF_CONTOUR_TYPE_MAX               =  3
+    SDF_EDGE_TYPE_MAX               =  3
 
-  } SDF_Contour_Type;
+  } SDF_Edge_Type;
 
-  /* structure to hold a contour */
-  typedef struct  SDF_Contour_
+  /* structure to hold a edge */
+  typedef struct  SDF_Edge_
   {
-    SDF_Vector            start_pos;        /* start position contour      */
-    SDF_Vector            end_pos;          /* end position contour        */
-    SDF_Vector            control_point_a;  /* unused in line type contour */
+    SDF_Vector            start_pos;        /* start position of edge      */
+    SDF_Vector            end_pos;          /* end position of edge        */
+    SDF_Vector            control_point_a;  /* unused in line type         */
     SDF_Vector            control_point_b;  /* unused in line & quadratic  */
 
-    SDF_Contour_Type      contour_type;     /* contour identifier          */
+    SDF_Edge_Type         edge_type;        /* edge identifier             */
 
-    struct SDF_Contour_*  next;             /* to create a linked list     */
+    struct SDF_Edge_*     next;             /* to create a linked list     */
 
-  } SDF_Contour;
+  } SDF_Edge;
 
   /* structure represent a complete shape defined by FT_Outline */
   /* in a form of linked list                                   */
   typedef struct SDF_Shape_
   {
-    SDF_Vector    current_pos;   /* to store move_to position       */
+    SDF_Vector    current_pos;   /* to store move_to position     */
 
-    SDF_Contour*  contour_head;  /* linked list of all the contours */
+    SDF_Edge*     head;          /* linked list of all the edges  */
 
-    FT_ULong      num_contours;  /* total number of contours        */
+    FT_ULong      num_edges;     /* total number of edges         */
 
-    FT_Memory     memory;        /* to allocate/deallocate memory   */
+    FT_Memory     memory;        /* to allocate/deallocate memory */
 
   } SDF_Shape;
 
@@ -93,13 +93,13 @@ FT_BEGIN_HEADER
    */
 
   FT_LOCAL( void )
-  SDF_Contour_Init( SDF_Contour  *contour );
+  SDF_Edge_Init( SDF_Edge  *edge );
 
   FT_LOCAL( void )
   SDF_Shape_Init( SDF_Shape  *shape );
 
-  /* no need to create SDF_Contour_Done becuase              */
-  /* SDF_Shape_Done will free all the allocated SDF_Contour  */
+  /* no need to create SDF_Edge_Done becuase              */
+  /* SDF_Shape_Done will free all the allocated SDF_Edge  */
   FT_LOCAL( FT_Error )
   SDF_Shape_Done( SDF_Shape  *shape );
 
@@ -179,10 +179,10 @@ FT_BEGIN_HEADER
   sdf_vector_equal( SDF_Vector  a,
                     SDF_Vector  b );
 
-  /* returns the signed distance of a point on the curve `contour' */
-  /* that is nearest to `point'                                    */
+  /* returns the signed distance of a point on the curve `edge' */
+  /* that is nearest to `point'                                 */
   FT_LOCAL( FT_Error )
-  get_min_distance( SDF_Contour*          contour,
+  get_min_distance( SDF_Edge*             edge,
                     const SDF_Vector      point,
                     SDF_Signed_Distance  *out );
 

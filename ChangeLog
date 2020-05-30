@@ -1,3 +1,9 @@
+2020-05-30  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] renamed `contour' to `edge' since a contour
+	is used to represent a complete connected shape of edges
+	of different types.
+
 2020-05-29  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] replaced all `float' by a typedef `SDF_DataType'
