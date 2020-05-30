@@ -18,6 +18,7 @@ FT_BEGIN_HEADER
   FT_EXPORT( FT_Error )
   Generate_SDF( FT_Library     library,
                 FT_GlyphSlot   glyph,
+                SDF_DataType   spread,
                 FT_Bitmap     *abitmap );
 
 

@@ -42,6 +42,7 @@
   FT_EXPORT_DEF( FT_Error )
   Generate_SDF( FT_Library     library,
                 FT_GlyphSlot   glyph,
+                SDF_DataType   spread,
                 FT_Bitmap     *abitmap )
   {
     SDF_Shape  shape;
@@ -118,9 +119,11 @@
 
 
           head                    = shape.head;
-          current_pos.x           = ( SDF_DataType )i;
+
+          /* add 0.5 to calculate distance from center of pixel */
+          current_pos.x           = ( SDF_DataType )i + 0.5f;
           current_pos.y           = ( SDF_DataType )height -
-                                    ( SDF_DataType )j;
+                                    ( SDF_DataType )j + 0.5f;
           min_udist               = FLT_MAX;
           min_dist.direction      = zero_vector;
           min_dist.nearest_point  = zero_vector;
@@ -201,6 +204,9 @@
             head = head->next;
           }
 
+          if ( min_udist > spread )
+            min_udist = spread;
+
           if ( min_udist > max_udist )
             max_udist = min_udist;
 
@@ -208,9 +214,9 @@
           if ( sdf_vector_cross( 
                  sdf_vector_sub( min_dist.nearest_point, current_pos ),
                  min_dist.direction ) > 0)
-            temp_buffer[j * width + i] = -0.0f; /* outside */
+            temp_buffer[j * width + i] = -min_udist; /* outside */
           else
-            temp_buffer[j * width + i] = 1.0f;  /* inside  */
+            temp_buffer[j * width + i] = min_udist;  /* inside  */
         }
       }
 
@@ -226,9 +232,7 @@
       /* normalize the values and put in the buffer */
       for ( i = 0; i < width * height; i++ )
       {
-        //temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
-        //temp_buffer[i] += 1.0f;
-        //temp_buffer[i] /= 2.0f;
+        temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
       }
 
       abitmap->buffer = ( unsigned char* )temp_buffer;

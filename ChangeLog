@@ -1,5 +1,14 @@
 2020-05-30  Anuj Verma  <anujv@iitbhilai.ac.in>
 
+	* sdfgen.h (Generate_SDF): added an `spread' parameter
+	  which is used to specify the maximum distance value.
+	  Any distance greater than it will be discarded.
+	  Also, now the distance is calculaed from the center of
+	  the pixel (previously is was being calculated from the
+	  bottom left corner).
+
+2020-05-30  Anuj Verma  <anujv@iitbhilai.ac.in>
+
 	[sdf-outline] renamed `contour' to `edge' since a contour
 	is used to represent a complete connected shape of edges
 	of different types.
