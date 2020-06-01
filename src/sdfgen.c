@@ -15,7 +15,7 @@
 
 #define FT_26DOT6_TO_FLOAT( x )  ( (SDF_DataType)x / 64.0f )
 
-#define EPSILON 0.000001f
+#define EPSILON 0.00000001f
 
   /* used to initialize vectors */
   static
@@ -98,12 +98,12 @@
     /* now loop through all the pixels and determine the shortest   */
     /* distance from the pixel's position to the nearest edge       */
     {
-      FT_Memory  memory       = library->memory;
-      FT_UInt    i            = 0u;
-      FT_UInt    j            = 0u;
+      FT_Memory      memory       = library->memory;
+      FT_UInt        i            = 0u;
+      FT_UInt        j            = 0u;
 
-      SDF_DataType*     temp_buffer  = NULL;
-      SDF_DataType      max_udist    = 0.0f; /* used to normalize values   */
+      SDF_DataType*  temp_buffer  = NULL;
+      SDF_DataType   max_udist    = 0.0f; /* used to normalize values   */
 
 
       FT_MEM_ALLOC( temp_buffer, width * height * sizeof( SDF_DataType ) );
@@ -112,111 +112,94 @@
       {
         for ( i = 0; i < width; i++ )
         {
-          SDF_Edge*             head;        /* used to iterate            */
-          SDF_Vector            current_pos; /* current pixel position     */
-          SDF_Signed_Distance   min_dist;    /* shortest signed distance   */
-          SDF_DataType          min_udist;   /* shortest unsigned distance */
+          FT_ULong      index = j * width + i;
+          FT_ULong      winding_sum = 0;
+
+          SDF_Contour*  head;        /* used to iterate            */
+          SDF_Vector    current_pos; /* current pixel position     */
+
+          SDF_DataType  min_pdist;   /* shortest positive distance */
+          SDF_DataType  min_ndist;   /* shortest negative distance */
+          SDF_DataType  min_dist;    /* final shortest signed distance */
+
+          SDF_Contour_Orientation  porien; /* orientation of `min_pdist' */
+          SDF_Contour_Orientation  norien; /* orientation of `min_ndist' */
 
 
-          head                    = shape.head;
+          head           = shape.head;
 
           /* add 0.5 to calculate distance from center of pixel */
-          current_pos.x           = ( SDF_DataType )i + 0.5f;
-          current_pos.y           = ( SDF_DataType )height -
-                                    ( SDF_DataType )j + 0.5f;
-          min_udist               = FLT_MAX;
-          min_dist.direction      = zero_vector;
-          min_dist.nearest_point  = zero_vector;
+          current_pos.x  = ( SDF_DataType )i + 0.5f;
+          current_pos.y  = ( SDF_DataType )height -
+                           ( SDF_DataType )j + 0.5f;
+          min_pdist      = FLT_MAX;
+          min_ndist      = FLT_MAX;
 
-          /* currently we use a brute force algorithm to compute */
-          /* shortest distance from all the curves               */
-          while ( head != NULL )
+          porien         = SDF_CONTOUR_ORIENTATION_NONE;
+          norien         = SDF_CONTOUR_ORIENTATION_NONE;
+
+          if ( i == 31 && j == 7 )
           {
-            SDF_Signed_Distance  dist;
-            SDF_DataType         udist;
+            int ap = 0;
+          }
+
+          while ( head )
+          {
+            SDF_Vector            p_to_c;  /* point to contour */
+            SDF_Signed_Distance   dist;
+            SDF_DataType          udist;
 
 
-            error = get_min_distance( head, current_pos, &dist );
+            error = get_min_conour( head, current_pos, &dist );
             if ( error != FT_Err_Ok )
-              goto Exit;
-
-            udist = sdf_vector_length( 
-                      sdf_vector_sub( dist.nearest_point, current_pos ) );
-
-            if ( fabs( min_udist ) - fabs( udist ) > EPSILON )
             {
-              /* the two distances are fairly apart */
-              min_udist = udist;
-              min_dist = dist;
+              FT_MEM_FREE( temp_buffer );
+              goto Exit;
+            }
+
+            p_to_c = sdf_vector_sub(dist.nearest_point, current_pos);
+            udist = sdf_vector_length( p_to_c );
+            p_to_c = sdf_vector_normalize( p_to_c );
+
+            if ( sdf_vector_cross( dist.direction, p_to_c ) > 0 )
+            {
+              if ( head->orientation == SDF_CONTOUR_ORIENTATION_CLOCKWISE )
+                winding_sum++;
+
+              if ( udist < min_pdist )
+              {
+                min_pdist = udist;
+                porien = head->orientation;
+              }
             }
             else
             {
-              /* the two distances are pretty close, in this case */
-              /* the endpoints might be connected and that is the */
-              /* shortest distance                                */
-              SDF_Vector  temp          = zero_vector;
-              SDF_Vector  p_to_c        = zero_vector; /* point to curve */
+              if ( head->orientation == SDF_CONTOUR_ORIENTATION_ANTI_CLOCKWISE )
+                winding_sum--;
 
-              SDF_DataType  dir1        = 0.0f;
-              SDF_DataType  dir2        = 0.0f;
-              SDF_DataType  ortho1      = 0.0f;
-              SDF_DataType  ortho2      = 0.0f;
-
-
-              temp = sdf_vector_sub( dist.nearest_point,
-                                     min_dist.nearest_point );
-              if ( sdf_vector_length( temp ) <= EPSILON )
+              if ( udist < min_ndist )
               {
-                /* the nearest point is the endpoint and since two    */
-                /* enpoint are connected we are getting two distance. */
-                /* but both curves might have opposite direction, so  */
-                /* now we have to determine the correct direction     */
-
-                /* first check if the two directions are opposite     */
-                p_to_c = sdf_vector_sub( dist.nearest_point, current_pos );
-
-                dir1 = sdf_vector_cross( p_to_c, dist.direction );
-                dir2 = sdf_vector_cross( p_to_c, min_dist.direction );
-
-                if ( dir1 * dir2 <= 0.0f )
-                {
-                  /* the two directions are opposite so simply take   */
-                  /* one with higher orthogonality                    */
-                  p_to_c = sdf_vector_normalize( p_to_c );
-
-                  ortho1 = sdf_vector_cross( dist.direction, p_to_c );
-                  ortho2 = sdf_vector_cross( min_dist.direction, p_to_c );
-
-                  ortho1 = fabs( ortho1 );
-                  ortho2 = fabs( ortho2 );
-
-                  /* now take the signed distance which makes same */
-                  /* directions as `dir3'                          */
-                  if ( ortho1 > ortho2 )
-                  {
-                    min_udist = udist;
-                    min_dist = dist;
-                  }
-                }
+                min_ndist = udist;
+                norien = head->orientation;
               }
             }
 
             head = head->next;
           }
 
-          if ( min_udist > spread )
-            min_udist = spread;
-
-          if ( min_udist > max_udist )
-            max_udist = min_udist;
-
-          /* determine the sign */
-          if ( sdf_vector_cross( 
-                 sdf_vector_sub( min_dist.nearest_point, current_pos ),
-                 min_dist.direction ) > 0)
-            temp_buffer[j * width + i] = -min_udist; /* outside */
+          if ( min_ndist < min_pdist && winding_sum <= 0 )
+            temp_buffer[index] = -min_ndist;
           else
-            temp_buffer[j * width + i] = min_udist;  /* inside  */
+            temp_buffer[index] =  min_pdist;
+
+          if ( temp_buffer[index] > spread )
+            temp_buffer[index] = spread;
+          else if ( temp_buffer[index] < -spread )
+            temp_buffer[index] = -spread;
+
+          if ( fabs( temp_buffer[index] ) > max_udist )
+            max_udist = fabs( temp_buffer[index] );
+
         }
       }
 
@@ -257,13 +240,25 @@
                                     SDF_EDGE_TYPE_NONE, NULL };
 
   static
-  const SDF_Shape  null_sdf_shape     = { { 0.0f, 0.0f }, NULL, 0u };
+  const SDF_Contour null_sdf_contour = { { 0.0f, 0.0f }, 
+                                         SDF_CONTOUR_ORIENTATION_NONE,
+                                         NULL, 0u };
+
+  static
+  const SDF_Shape  null_sdf_shape     = { NULL, 0u, NULL };
 
   FT_LOCAL_DEF( void )
   SDF_Edge_Init( SDF_Edge  *edge )
   {
     if ( edge )
       *edge = null_sdf_edge;
+  }
+
+  FT_LOCAL_DEF( void )
+  SDF_Contour_Init( SDF_Contour  *contour )
+  {
+    if ( contour )
+      *contour = null_sdf_contour;
   }
 
   FT_LOCAL_DEF( void )
@@ -277,7 +272,7 @@
   SDF_Shape_Done( SDF_Shape  *shape )
   {
     FT_Memory     memory;
-    SDF_Edge*     head;
+    SDF_Contour*  contour_head;
 
     if ( !shape )
       return FT_THROW( Invalid_Argument );
@@ -286,15 +281,25 @@
       return FT_THROW( Invalid_Library_Handle );
 
     memory = shape->memory;
-    head = shape->head;
+    contour_head = shape->head;
 
-    while ( head )
+    while ( contour_head )
     {
-      SDF_Edge*  temp = head;
+      SDF_Contour*  c          = contour_head;
+      SDF_Edge*     edge_head  = c->head;
 
 
-      head = head->next;
-      FT_MEM_FREE( temp );
+      while ( edge_head )
+      {
+        SDF_Edge*  e  = edge_head;
+
+
+        edge_head = edge_head->next;
+        FT_MEM_FREE( e );
+      }
+
+      contour_head = contour_head->next;
+      FT_MEM_FREE( c );
     }
 
     *shape = null_sdf_shape;
@@ -308,11 +313,28 @@
   sdf_outline_move_to( const FT_Vector*  to,
                        void*             user )
   {
-    SDF_Shape*  shape = ( SDF_Shape* )user;
-    FT_Error    error = FT_Err_Ok;
+    SDF_Shape*    shape     = ( SDF_Shape* )user;
+    SDF_Contour*  contour   = NULL;
+
+    FT_Error      error     = FT_Err_Ok;
+    FT_Memory     memory    = shape->memory;
 
 
-    shape->current_pos = FT_To_SDF_Vec( *to );
+    FT_MEM_QNEW( contour );
+    if ( error != FT_Err_Ok )
+      return error;
+
+    SDF_Contour_Init( contour );
+
+    contour->last_pos     = FT_To_SDF_Vec( *to );
+
+    /* add contour to the shape */
+    if ( shape->head )
+      contour->next = shape->head;
+
+    shape->head           = contour;
+    shape->num_contours  += 1u;
+
     return error;
   }
 
@@ -321,6 +343,7 @@
                        void*             user )
   {
     SDF_Shape*    shape     = ( SDF_Shape* )user;
+    SDF_Contour*  contour   = shape->head;
     SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
     SDF_Edge*     edge      = NULL;
 
@@ -328,8 +351,8 @@
     FT_Error    error       = FT_Err_Ok;
 
 
-    if ( endpoint.x != shape->current_pos.x ||
-         endpoint.y != shape->current_pos.y )
+    if ( endpoint.x != contour->last_pos.x ||
+         endpoint.y != contour->last_pos.y )
     {
       /* only add edge if current_pos != to */
       FT_MEM_QNEW( edge );
@@ -337,17 +360,17 @@
         return error;
       SDF_Edge_Init( edge );
       
-      edge->start_pos     = shape->current_pos;
+      edge->start_pos     = contour->last_pos;
       edge->end_pos       = endpoint;
       edge->edge_type     = SDF_EDGE_TYPE_LINE;
 
-      /* add the edge to shape */
-      if ( shape->head )
-        edge->next = shape->head;
+      /* add the edge to contour */
+      if ( contour->head )
+        edge->next = contour->head;
 
-      shape->head         = edge;
-      shape->current_pos  = endpoint;
-      shape->num_edges    += 1u;
+      contour->head        = edge;
+      contour->last_pos    = endpoint;
+      contour->num_edges  += 1u;
     }
 
     return error;
@@ -359,6 +382,7 @@
                         void*             user )
   {
     SDF_Shape*    shape     = ( SDF_Shape* )user;
+    SDF_Contour*  contour   = shape->head;
     SDF_Vector    endpoint  = FT_To_SDF_Vec( *to );
     SDF_Vector    control   = FT_To_SDF_Vec( *control1 );
     SDF_Edge*     edge      = NULL;
@@ -373,18 +397,18 @@
         return error;
     SDF_Edge_Init( edge );
 
-    edge->start_pos        = shape->current_pos;
+    edge->start_pos        = contour->last_pos;
     edge->end_pos          = endpoint;
     edge->control_point_a  = control;
     edge->edge_type        = SDF_EDGE_TYPE_QUADRATIC_BEZIER;
 
-    /* add the edge to shape */
-    if ( shape->head )
-      edge->next = shape->head;
+    /* add the edge to contour */
+    if ( contour->head )
+      edge->next = contour->head;
 
-    shape->head         = edge;
-    shape->current_pos  = endpoint;
-    shape->num_edges    += 1u;
+    contour->head        = edge;
+    contour->last_pos    = endpoint;
+    contour->num_edges  += 1u;
 
     return error;
   }
@@ -396,6 +420,7 @@
                         void*             user )
   {
     SDF_Shape*    shape      = ( SDF_Shape* )user;
+    SDF_Contour*  contour    = shape->head;
     SDF_Vector    endpoint   = FT_To_SDF_Vec( *to );
     SDF_Vector    control_a  = FT_To_SDF_Vec( *control1 );
     SDF_Vector    control_b  = FT_To_SDF_Vec( *control2 );
@@ -412,19 +437,19 @@
         return error;
     SDF_Edge_Init( edge );
 
-    edge->start_pos        = shape->current_pos;
+    edge->start_pos        = contour->last_pos;
     edge->end_pos          = endpoint;
     edge->control_point_a  = control_a;
     edge->control_point_b  = control_b;
     edge->edge_type        = SDF_EDGE_TYPE_CUBIC_BEZIER;
 
-    /* add the edge to shape */
-    if ( shape->head )
-      edge->next = shape->head;
+    /* add the edge to contour */
+    if ( contour->head )
+      edge->next = contour->head;
 
-    shape->head         = edge;
-    shape->current_pos  = endpoint;
-    shape->num_edges    += 1u;
+    contour->head       = edge;
+    contour->last_pos   = endpoint;
+    contour->num_edges  += 1u;
 
     return error;
   }
@@ -433,6 +458,12 @@
   SDF_Decompose_Outline( FT_Outline*  outline,
                          SDF_Shape   *shape )
   {
+    FT_Int        i       = 0;
+    FT_Error      error   = FT_Err_Ok;
+
+    SDF_Contour*  contour = NULL;
+
+
     /* initialize the FT_Outline_Funcs struct */
     FT_Outline_Funcs outline_decompost_funcs;
     outline_decompost_funcs.shift     = 0;
@@ -443,9 +474,20 @@
     outline_decompost_funcs.cubic_to  = sdf_outline_cubic_to;
 
 
-    return FT_Outline_Decompose( outline, 
-                                 &outline_decompost_funcs,
-                                 ( void * )shape );
+    error=  FT_Outline_Decompose( outline, 
+                                  &outline_decompost_funcs,
+                                  ( void * )shape );
+    if ( error != FT_Err_Ok )
+      return error;
+
+    contour = shape->head;
+    while ( contour )
+    {
+      contour->orientation = get_contour_orientation( contour );
+      contour = contour->next;
+    }
+
+    return error;
   }
 
   /**************************************************************************
@@ -693,6 +735,157 @@
     if ( a.x == b.x && a.y == b.y )
         return 1;
     return 0;
+  }
+
+  FT_LOCAL( SDF_Contour_Orientation )
+  get_contour_orientation( SDF_Contour*  contour )
+  {
+    SDF_Edge*     head;
+
+    SDF_DataType  area = 0.0f;
+
+
+    if ( !contour || !contour->head )
+      return SDF_CONTOUR_ORIENTATION_NONE;
+
+    head = contour->head;
+
+    while ( head )
+    {
+      switch ( head->edge_type ) {
+      case SDF_EDGE_TYPE_LINE:
+      {
+        area += ( head->end_pos.x - head->start_pos.x ) *
+                ( head->end_pos.y + head->start_pos.y );
+        break;
+      }
+      case SDF_EDGE_TYPE_QUADRATIC_BEZIER:
+      {
+        area += ( head->control_point_a.x - head->start_pos.x ) *
+                ( head->control_point_a.y + head->start_pos.y );
+        area += ( head->end_pos.x - head->control_point_a.x ) *
+                ( head->end_pos.y + head->control_point_a.y );
+        break;
+      }
+      case SDF_EDGE_TYPE_CUBIC_BEZIER:
+      {
+        area += ( head->control_point_a.x - head->start_pos.x ) *
+                ( head->control_point_a.y + head->start_pos.y );
+        area += ( head->control_point_b.x - head->control_point_a.x ) *
+                ( head->control_point_b.y + head->control_point_a.y );
+        area += ( head->end_pos.x - head->control_point_b.x ) *
+                ( head->end_pos.y + head->control_point_b.y );
+        break;
+      }
+      default:
+          return SDF_CONTOUR_ORIENTATION_NONE;
+      }
+
+      head = head->next;
+    }
+
+    if ( area > 0.0f )
+      return SDF_CONTOUR_ORIENTATION_CLOCKWISE;
+    else
+      return SDF_CONTOUR_ORIENTATION_ANTI_CLOCKWISE;
+  }
+
+  FT_LOCAL_DEF( FT_Error )
+  get_min_conour( SDF_Contour*          contour,
+                  const SDF_Vector      point,
+                  SDF_Signed_Distance  *out )
+  {
+    SDF_Edge*             head;
+    SDF_Signed_Distance   min_dist;
+    SDF_DataType          min_udist;
+
+    FT_Error              error  = FT_Err_Ok;
+
+
+    head                    = contour->head;
+    min_udist               = FLT_MAX;
+    min_dist.direction      = zero_vector;
+    min_dist.nearest_point  = zero_vector;
+
+    /* currently we use a brute force algorithm to compute */
+    /* shortest distance from all the curves               */
+    while ( head )
+    {
+      SDF_Signed_Distance  dist;
+      SDF_DataType         udist;
+    
+    
+      error = get_min_distance( head, point, &dist );
+      if ( error != FT_Err_Ok )
+        return error;
+    
+      udist = sdf_vector_length( 
+                sdf_vector_sub( dist.nearest_point, point ) );
+    
+      if ( fabs( min_udist ) - fabs( udist ) > EPSILON )
+      {
+        /* the two distances are fairly apart */
+        min_udist = udist;
+        min_dist = dist;
+      }
+      else
+      {
+        /* the two distances are pretty close, in this case */
+        /* the endpoints might be connected and that is the */
+        /* shortest distance                                */
+        SDF_Vector  temp          = zero_vector;
+        SDF_Vector  p_to_c        = zero_vector; /* point to curve */
+    
+        SDF_DataType  dir1        = 0.0f;
+        SDF_DataType  dir2        = 0.0f;
+        SDF_DataType  ortho1      = 0.0f;
+        SDF_DataType  ortho2      = 0.0f;
+    
+    
+        temp = sdf_vector_sub( dist.nearest_point,
+                               min_dist.nearest_point );
+        if ( sdf_vector_length( temp ) <= EPSILON )
+        {
+          /* the nearest point is the endpoint and since two    */
+          /* enpoint are connected we are getting two distance. */
+          /* but both curves might have opposite direction, so  */
+          /* now we have to determine the correct direction     */
+    
+          /* first check if the two directions are opposite     */
+          p_to_c = sdf_vector_sub( dist.nearest_point, point );
+    
+          dir1 = sdf_vector_cross( p_to_c, dist.direction );
+          dir2 = sdf_vector_cross( p_to_c, min_dist.direction );
+    
+          if ( dir1 * dir2 <= 0.0f )
+          {
+            /* the two directions are opposite so simply take   */
+            /* one with higher orthogonality                    */
+            p_to_c = sdf_vector_normalize( p_to_c );
+    
+            ortho1 = sdf_vector_cross( dist.direction, p_to_c );
+            ortho2 = sdf_vector_cross( min_dist.direction, p_to_c );
+    
+            ortho1 = fabs( ortho1 );
+            ortho2 = fabs( ortho2 );
+    
+            /* now take the signed distance which makes same */
+            /* directions as `dir3'                          */
+            if ( ortho1 > ortho2 )
+            {
+              min_udist = udist;
+              min_dist = dist;
+            }
+          }
+        }
+      }
+    
+      head = head->next;
+    }
+
+    *out = min_dist;
+
+    return error;
   }
 
   FT_LOCAL_DEF( FT_Error )

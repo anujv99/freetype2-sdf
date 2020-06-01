@@ -1,3 +1,17 @@
+2020-06-01  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] combined edges belonging to a contour together
+	and also added overlapping support. (which currently dosen't
+	work properly for fonts with cubic bezier curves)
+
+	* sdfgen.h (SDF_Contour): added struct which represent one
+	  contour (i.e. a collection of edges)
+	* sdfgen.h (SDF_Contour_Orientation, get_contour_orientation):
+	  added enum for contour orientation, and a function which can
+	  be used to get orientation of a single contour.
+	* sdfgen.h (get_min_conour): added function which returns
+	  shortest distance from a point to a contour.
+
 2020-05-30  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	* sdfgen.h (Generate_SDF): added an `spread' parameter
