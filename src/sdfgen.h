@@ -9,8 +9,8 @@
 
 FT_BEGIN_HEADER
 
-  /* data type used for computting signed distance fields */
-  typedef float  SDF_DataType;
+  typedef FT_Vector FT_26D6Vec;
+  typedef FT_Vector FT_16D16Vec;
 
   /* generate sdf from outline */
   /* input: library, outline   */
@@ -18,7 +18,6 @@ FT_BEGIN_HEADER
   FT_EXPORT( FT_Error )
   Generate_SDF( FT_Library     library,
                 FT_GlyphSlot   glyph,
-                SDF_DataType   spread,
                 FT_Bitmap     *abitmap );
 
 
@@ -30,20 +29,12 @@ FT_BEGIN_HEADER
    *
    */
 
-  /* SDF_DataType vector */
-  typedef struct  SDF_Vector_
-  {
-    SDF_DataType  x;
-    SDF_DataType  y;
-
-  } SDF_Vector;
-
   /* can be used to determine weather the point is */
   /* inside or outside the shape's outline         */
   typedef struct SDF_Signed_Distance_
   {
-    SDF_Vector  nearest_point;  /* point on curve                    */
-    SDF_Vector  direction;      /* direction of curve on above point */
+    FT_Int       sign;           /* weather outside or inside    */
+    FT_Fixed     distance;       /* magnitude of `nearest_point' */
 
   } SDF_Signed_Distance;
 
@@ -68,10 +59,10 @@ FT_BEGIN_HEADER
   /* structure to hold a edge */
   typedef struct  SDF_Edge_
   {
-    SDF_Vector            start_pos;        /* start position of edge      */
-    SDF_Vector            end_pos;          /* end position of edge        */
-    SDF_Vector            control_point_a;  /* unused in line type         */
-    SDF_Vector            control_point_b;  /* unused in line & quadratic  */
+    FT_26D6Vec            start_pos;        /* start position of edge      */
+    FT_26D6Vec            end_pos;          /* end position of edge        */
+    FT_26D6Vec            control_point_a;  /* unused in line type         */
+    FT_26D6Vec            control_point_b;  /* unused in line & quadratic  */
 
     SDF_Edge_Type         edge_type;        /* edge identifier             */
 
@@ -82,7 +73,7 @@ FT_BEGIN_HEADER
   /* structure to hold a contour which is made of several edges */
   typedef struct  SDF_Contour_
   {
-    SDF_Vector               last_pos;    /* endpoint of last edge   */
+    FT_26D6Vec               last_pos;    /* endpoint of last edge   */
 
     SDF_Contour_Orientation  orientation; /* orientation of contour  */
 
@@ -138,72 +129,6 @@ FT_BEGIN_HEADER
    *
    */
 
-  /* function to clamp the input value between min and max */
-  FT_LOCAL( SDF_DataType )
-  clamp( SDF_DataType  input,
-         SDF_DataType  min,
-         SDF_DataType  max );
-
-  /* solve a quadratic equation ( ax^2 + bx + c = 0; ) and return */
-  /* the number of roots. the roots are written to `out'.         */
-  FT_LOCAL( FT_UShort )
-  solve_quadratic_equation( SDF_DataType  a,
-                            SDF_DataType  b,
-                            SDF_DataType  c,
-                            SDF_DataType  out[2] );
-
-  /* solve a cubic equation ( ax^3 + bx^2 + cx + d = 0; ) and     */
-  /* return the number of roots. the roots are written to `out'.  */
-  FT_LOCAL( FT_UShort )
-  solve_cubic_equation( SDF_DataType  a,
-                        SDF_DataType  b,
-                        SDF_DataType  c,
-                        SDF_DataType  d,
-                        SDF_DataType  out[3] );
-
-  /* returns the magnitude of a vector */
-  FT_LOCAL( SDF_DataType )
-  sdf_vector_length( SDF_Vector  vector );
-
-  /* returns the squared magnitude of a vector */
-  FT_LOCAL( SDF_DataType )
-  sdf_vector_squared_length( SDF_Vector  vector );
-
-  /* returns component wise addition of `a' and `b' */
-  FT_LOCAL( SDF_Vector )
-  sdf_vector_add( SDF_Vector  a,
-                  SDF_Vector  b );
-
-  /* returns component wise subtraction of `a' and `b' */
-  FT_LOCAL( SDF_Vector )
-  sdf_vector_sub( SDF_Vector  a,
-                  SDF_Vector  b );
-
-  /* returns component wise multiplication by `scale' */
-  FT_LOCAL( SDF_Vector )
-  sdf_vector_scale( SDF_Vector    vector,
-                    SDF_DataType  scale );
-
-  /* dot/scalar product of two vector `a' and `b' */
-  FT_LOCAL( SDF_DataType )
-  sdf_vector_dot( SDF_Vector  a, 
-                  SDF_Vector  b );
-
-  /* cross/vector product of two vector `a' and `b'. */
-  /* the cross product will be in the z-axis.        */
-  FT_LOCAL( SDF_DataType )
-  sdf_vector_cross( SDF_Vector  a,
-                    SDF_Vector  b );
-
-  /* returns a normalized vector ( i.e. vector length = 1.0f ) */
-  FT_LOCAL( SDF_Vector )
-  sdf_vector_normalize( SDF_Vector  vector );
-
-  /* return 1 if `a' and `b' are equal component-wise */
-  FT_LOCAL( FT_Bool )
-  sdf_vector_equal( SDF_Vector  a,
-                    SDF_Vector  b );
-
   /* returns the orientation of the contour the orintation */
   /* is determined by calculating the area of the control  */
   /* box. positive area is taken clockwise.                */
@@ -214,14 +139,14 @@ FT_BEGIN_HEADER
   /* that is nearest to `point'                              */
   FT_LOCAL( FT_Error )
   get_min_conour( SDF_Contour*          contour,
-                  const SDF_Vector      point,
+                  const FT_26D6Vec      point,
                   SDF_Signed_Distance  *out );
 
   /* returns the signed distance of a point on the curve `edge' */
   /* that is nearest to `point'                                 */
   FT_LOCAL( FT_Error )
   get_min_distance( SDF_Edge*             edge,
-                    const SDF_Vector      point,
+                    const FT_26D6Vec      point,
                     SDF_Signed_Distance  *out );
 
 FT_END_HEADER
