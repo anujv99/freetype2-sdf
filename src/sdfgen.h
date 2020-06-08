@@ -129,6 +129,13 @@ FT_BEGIN_HEADER
    *
    */
 
+  FT_LOCAL_DEF( FT_UShort )
+  solve_cubic_equation( FT_Fixed a,
+                        FT_Fixed b,
+                        FT_Fixed c,
+                        FT_Fixed d,
+                        FT_Fixed out[3] );
+
   /* returns the orientation of the contour the orintation */
   /* is determined by calculating the area of the control  */
   /* box. positive area is taken clockwise.                */

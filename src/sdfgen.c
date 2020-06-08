@@ -14,6 +14,7 @@
 #include FT_TRIGONOMETRY_H
 
 #include "sdfgen.h"
+#include "ext.h"
 
   /* used to initialize vectors */
   static
@@ -31,6 +32,11 @@
                 FT_GlyphSlot   glyph,
                 FT_Bitmap     *abitmap )
   {
+
+    FT_Fixed roots[3] = { 0, 0, 0 };
+
+    FT_UShort pup = solve_cubic_equation( 2 * 64, -4 * 64, -22 * 64, 24 * 64, roots );
+
     SDF_Shape  shape;
     FT_Error   error   = FT_Err_Ok;
 
@@ -149,9 +155,6 @@
       for ( i = 0; i < width * height; i++ )
       {
         temp_buffer[i] = ( temp_buffer[i] ) / max_udist;
-        temp_buffer[i] += 1.0f;
-        temp_buffer[i] /= 2.0f;
-        temp_buffer[i] = 1.0f - temp_buffer[i];
       }
 
       abitmap->buffer = ( unsigned char* )temp_buffer;
@@ -432,7 +435,101 @@
    *
    */
 
-  FT_LOCAL( SDF_Contour_Orientation )
+  FT_LOCAL_DEF( FT_UShort )
+  solve_cubic_equation( FT_Fixed a,
+                        FT_Fixed b,
+                        FT_Fixed c,
+                        FT_Fixed d,
+                        FT_Fixed out[3] )
+  {
+    FT_Fixed  q              = 0;     /* intermediate      */
+    FT_Fixed  r              = 0;     /* intermediate      */
+    FT_Fixed  discriminant   = 0;     /* discriminant      */
+
+    FT_Fixed  a2             = b;     /* x^2 coefficients  */
+    FT_Fixed  a1             = c;     /* x coefficients    */
+    FT_Fixed  a0             = d;     /* constant          */
+
+    FT_Fixed  q3             = 0;
+    FT_Fixed  r2             = 0;
+    FT_Fixed  a23            = 0;
+
+    if ( a == 0 )
+    {
+      __debugbreak();
+      /* quadratic equation */
+      //return solve_quadratic_equation( b, c, d, out );
+    }
+
+    if ( a != ( 1 << 6 ) )
+    {
+      /* normalize the coefficients */
+      a2 = ( a2 * 64 ) / a;
+      a1 = ( a1 * 64 ) / a;
+      a0 = ( a0 * 64 ) / a;
+    }
+
+    a2 *= 1024;
+    a1 *= 1024;
+    a0 *= 1024;
+
+    a23 = FT_MulFix( a2, a2 );
+    a23 = FT_MulFix( a23, a2 );
+
+    q = ( ( 3 * a1 ) - FT_MulFix( a2, a2 ) ) / 9;
+    r = ( ( 9 * FT_MulFix( a1, a2 ) ) - ( 27 * a0 ) - ( 2 * a23 ) ) / 54;
+
+    q3 = FT_MulFix( q, q );
+    q3 = FT_MulFix( q3, q );
+
+    r2 = FT_MulFix( r, r );
+
+    discriminant = q3 + r2;
+
+    if ( discriminant < 0 )
+    {
+      FT_Fixed  t = 0;
+
+
+      q3 = square_root( -q3 );
+      t = arc_cos( FT_DivFix( r, q3 ) );
+      a2 /= 3;
+      q = 2 * square_root( -q );
+      out[0] = FT_MulFix( q, FT_Cos( t / 3 ) ) - a2;
+      out[1] = FT_MulFix( q, FT_Cos( ( t + FT_ANGLE_PI * 2 ) / 3 ) ) - a2;
+      out[2] = FT_MulFix( q, FT_Cos( ( t + FT_ANGLE_PI * 4 ) / 3 ) ) - a2;
+
+      return 3;
+    }
+    else if ( discriminant == 0 )
+    {
+      FT_Fixed  s = 0;
+
+
+      s = cube_root( r );
+      a2 /= -3;
+      out[0] = a2 + ( 2 * s );
+      out[1] = a2 - s;
+
+      return 2;
+    }
+    else
+    {
+      FT_Fixed  s = 0;
+      FT_Fixed  t = 0;
+
+
+      discriminant = square_root( discriminant );
+      s = cube_root( r + discriminant );
+      t = cube_root( r - discriminant );
+      a2 /= -3;
+      out[0] = a2 + ( s + t );
+
+      return 1;
+    }
+  }
+
+  FT_LOCAL_DEF( SDF_Contour_Orientation )
   get_contour_orientation( SDF_Contour*  contour )
   {
     SDF_Edge*     head;
@@ -563,6 +660,7 @@
       /*                                                             */
       /* => by simplifying the above equation we get the factor of   */
       /*    point_on_line such that                                  */
+      /*    t = ( ( p - a ) . ( b - a ) ) / ( |b - a| ^ 2 )          */
       /*                                                             */
       /* => we clamp the factor t between [0.0f, 1.0f], because the  */
       /*    point_on_line can be outside the line segment.           */
@@ -596,10 +694,12 @@
       line_segment.y = b.y - a.y;
 
       line_length = FT_Vector_Length( &line_segment );
-      line_length = FT_MulFix( line_length, line_length );
+      line_length = ( line_length * line_length ) / 64;
 
-      factor  = FT_MulDiv( p_sub_a.x, line_segment.x, line_length );
-      factor += FT_MulDiv( p_sub_a.y, line_segment.y, line_length );
+      factor = ( p_sub_a.x * line_segment.x ) / 64 +
+               ( p_sub_a.y * line_segment.y ) / 64;
+
+      factor = FT_DivFix( factor, line_length );
 
       /* clamp the factor between 0.0 and 1.0 in fixed point */
       if ( factor > ( 1 << 16 ) )
@@ -617,10 +717,155 @@
 
       out->distance = FT_Vector_Length( &nearest_point );
 
-      cross = FT_MulFix( nearest_point.x, b.y - a.y ) -
-              FT_MulFix( nearest_point.y, b.x - a.x );
+      cross = ( nearest_point.x * line_segment.y ) / 64 -
+              ( nearest_point.y * line_segment.x ) / 64;
 
-      out->sign = cross < 0 ? 1 : -1;
+      out->sign = cross < 0 ? -1 : 1;
+
+      break;
+    }
+    case SDF_EDGE_TYPE_QUADRATIC_BEZIER:
+    {
+      /* the procedure to find the shortest distance from a point to */
+      /* a quadratic bezier curve is simliar to a line segment. the  */
+      /* shortest distance will be perpendicular to the bezier curve */
+      /* The only difference from line is that there can be more     */
+      /* than one perpendicular and we also have to check the endpo- */
+      /* -ints, because the perpendicular may not be the shortest.   */
+      /*                                                             */
+      /* p0 = first endpoint                                         */
+      /* p1 = control point                                          */
+      /* p2 = second endpoint                                        */
+      /* p = point from which shortest distance is to be calculated  */
+      /* ----------------------------------------------------------- */
+      /* => the equation of a quadratic bezier curve can be written  */
+      /*    B( t ) = ( ( 1 - t )^2 )p0 + 2( 1 - t )tp1 + t^2p2       */
+      /*    here t is the factor with range [0.0f, 1.0f]             */
+      /*    the above equation can be rewritten as                   */
+      /*    B( t ) = t^2( p0 - 2p1 + p2 ) + 2t( p1 - p0 ) + p0       */
+      /*                                                             */
+      /*    now let A = ( p0 - 2p1 + p2), B = ( p1 - p0 )            */
+      /*    B( t ) = t^2( A ) + 2t( B ) + p0                         */
+      /*                                                             */
+      /* => the derivative of the above equation is written as       */
+      /*    B`( t ) = 2( tA + B )                                    */
+      /*                                                             */
+      /* => now to find the shortest distance from p to B( t ), we   */
+      /*    find the point on the curve at which the shortest        */
+      /*    distance vector ( i.e. B( t ) - p ) and the direction    */
+      /*    ( i.e. B`( t )) makes 90 degrees. in other words we make */
+      /*    the dot product zero.                                    */
+      /*    ( B( t ) - p ).( B`( t ) ) = 0                           */
+      /*    ( t^2( A ) + 2t( B ) + p0 - p ).( 2( tA + B ) ) = 0      */
+      /*                                                             */
+      /*    after simplifying we get a cubic equation as             */
+      /*    at^3 + bt^2 + ct + d = 0                                 */
+      /*    a = ( A.A ), b = ( 3A.B ), c = ( 2B.B + A.p0 - A.p )     */
+      /*    d = ( p0.B - p.B )                                       */
+      /*                                                             */
+      /* => now the roots of the equation can be computed using the  */
+      /*    `Cardano's Cubic formula'                                */
+      /*    ( https://mathworld.wolfram.com/CubicFormula.html )      */
+      /*    we discard the roots which do not lie in the range       */
+      /*    [0.0f, 1.0f] and also check the endpoints ( p0, p2 )     */
+      /*                                                             */
+      /* [note]: B and B( t ) are different in the above equations   */
+
+      FT_Vector  aA             = zero_vector;
+      FT_Vector  bB             = zero_vector;
+      FT_Vector  nearest_point  = zero_vector;
+      FT_Vector  temp           = zero_vector;
+
+      FT_Vector  p0             = edge->start_pos;
+      FT_Vector  p1             = edge->control_point_a;
+      FT_Vector  p2             = edge->end_pos;
+      FT_Vector  p              = point;
+
+      FT_Fixed   a              = 0;
+      FT_Fixed   b              = 0;
+      FT_Fixed   c              = 0;
+      FT_Fixed   d              = 0;
+      FT_Fixed   min            = INT_MAX;
+
+      FT_Fixed   roots[5]       = { 0, 0, 0, 0, 0 };
+
+      FT_Fixed   min_factor     = 0;
+      FT_Fixed   cross          = 0;
+
+      FT_UShort  num_roots      = 0;
+      FT_UShort  i              = 0;
+
+
+      aA.x = p0.x - 2 * p1.x + p2.x;
+      aA.y = p0.y - 2 * p1.y + p2.y;
+
+      bB.x = p1.x - p0.x;
+      bB.y = p1.y - p0.y;
+
+      a = ( aA.x * aA.x ) / 64 +
+          ( aA.y * aA.y ) / 64;
+
+      b = ( aA.x * bB.x ) / 64 +
+          ( aA.y * bB.y ) / 64;
+      b *= 3;
+
+      c = ( bB.x * bB.x ) / 64 +
+          ( bB.y * bB.y ) / 64;
+      c *= 2;
+      c += ( aA.x * p0.x ) / 64 +
+           ( aA.y * p0.y ) / 64;
+      c -= ( aA.x * p.x ) / 64 +
+           ( aA.y * p.y ) / 64;
+
+      d  = ( p0.x * bB.x ) / 64 +
+           ( p0.y * bB.y ) / 64;
+      d -= ( p.x * bB.x ) / 64 +
+           ( p.y * bB.y ) / 64;
+
+      num_roots = solve_cubic_equation( a, b, c, d, roots + 2 );
+
+      roots[0] = 0;
+      roots[1] = 1 << 16;
+      num_roots += 2;
+
+      for ( i = 0; i < num_roots; i++ )
+      {
+        FT_Fixed   t             = roots[i];
+        FT_Fixed   t2            = FT_MulFix( t, t );
+        FT_Fixed   dist          = 0;
+        
+        FT_Vector  curve_point   = zero_vector;  /* point on the curve */
+
+
+        /* only check of t in range [0.0f, 1.0f] */
+        if ( t < 0 || t > 1 << 16 )
+          continue;
+
+        /* B( t ) = t^2( A ) + 2t( B ) + p0  */
+        curve_point.x = FT_MulFix( aA.x, t2 ) + 2 * FT_MulFix( bB.x, t ) + p0.x - p.x;
+        curve_point.y = FT_MulFix( aA.y, t2 ) + 2 * FT_MulFix( bB.y, t ) + p0.y - p.y;
+
+        /* compute distance from `point' to the `curve_point' */
+        dist = FT_Vector_Length( &curve_point );
+
+        if ( dist < min )
+        {
+          min = dist;
+          nearest_point = curve_point;
+          min_factor = t;
+        }
+      }
+
+      out->distance = min;
+
+      /* determine the sign */
+      temp.x = 2 * FT_MulFix( aA.x, min_factor ) + 2 * bB.x;
+      temp.y = 2 * FT_MulFix( aA.y, min_factor ) + 2 * bB.y;
+
+      cross = ( nearest_point.x * temp.y ) / 64 -
+              ( nearest_point.y * temp.x ) / 64;
+
+      out->sign = cross < 0 ? -1 : 1;
 
       break;
     }

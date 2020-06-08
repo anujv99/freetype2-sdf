@@ -1,3 +1,14 @@
+2020-06-08  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] ported the current `get_min_distance' function
+	to do calculatiion in `FT_Fixed'. Currently only works for
+	line and quaddratic edge type.
+	
+	* sdfgen.c (get_min_distance): changed all computation to use
+	  fixed point instead of floats.
+	* sdfgen.c (solve_cubic_quation): also changed this function to
+	  use fixed point.
+
 2020-06-01  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] combined edges belonging to a contour together
