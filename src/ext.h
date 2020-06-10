@@ -24,7 +24,7 @@
     double  temp    = ( double )val / 65536;
     double  root    = sqrt( temp );
 
-    return ( FT_Fixed )( root * 65536 ); 
+    return ( FT_Fixed )( root * 65536 );
   }
 
   static FT_Fixed
@@ -33,7 +33,7 @@
     double  temp    = ( double )val / 65536;
     double  root    = cbrt( temp );
 
-    return ( FT_Fixed )( root * 65536 ); 
+    return ( FT_Fixed )( root * 65536 );
   }
 
 #endif /* EXT_H_ */

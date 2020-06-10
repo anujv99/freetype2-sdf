@@ -1,3 +1,16 @@
+2020-06-10  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] ported the remaining part of `get_min_distance'
+	to `FT_Fixed'. Now the entire function use fixed point and works
+	for all types of curves.
+	
+	* [bug] sdfgen.c (solve_cubic_quation): The function has overflow
+	  in very specific cases. ( example: Martel.ttf, glyph: 69 ). This
+	  cause the internal `discriminant' to wrap around and give invalid
+	  value.
+	* sdfgen.c (solve_quadratic_quation): Added quaddratic solver function
+	  because in some cases the coefficient of `x^3' is `0'.
+
 2020-06-08  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] ported the current `get_min_distance' function
