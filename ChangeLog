@@ -1,3 +1,13 @@
+2020-06-12  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] fixed an overflow caused while finding shortest
+	distance from line segment.
+	
+	* sdfgen.c (get_min_distance): changed `line_length' to 26.6
+	  to avoid overflow in large resolution glyphs.
+	* [bug] sdfgen.c (solve_cubic_quation): tried to fix the overflow
+	  by not calculating `discriminant'. This still is not perfect.
+
 2020-06-10  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] ported the remaining part of `get_min_distance'

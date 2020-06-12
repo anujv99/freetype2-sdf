@@ -60,8 +60,8 @@
     /* compute the width and height and add padding */
     FT_Outline_Get_CBox( &glyph->outline, &cBox );
 
-    width =  FT_ABS( ROUND_F26DOT6( cBox.xMax - cBox.xMin ) ) / 64;
-    height = FT_ABS( ROUND_F26DOT6( cBox.yMax - cBox.yMin ) ) / 64;
+    width =  FT_ABS( ROUND_F26DOT6( cBox.xMax - cBox.xMin ) );
+    height = FT_ABS( ROUND_F26DOT6( cBox.yMax - cBox.yMin ) );
 
     x_pad = width / 4;
     y_pad = height / 4;
@@ -69,11 +69,14 @@
     width += x_pad;
     height += y_pad;
 
-    x_shift = glyph->bitmap_left - x_pad / 2;
-    y_shift = glyph->bitmap_top - glyph->bitmap.rows - y_pad / 2;
+    x_shift = glyph->bitmap_left * 64 - x_pad / 2;
+    y_shift = glyph->bitmap_top * 64 - glyph->bitmap.rows * 64 - y_pad / 2;
 
     /* align the outlne to the grid */
-    FT_Outline_Translate(&glyph->outline, -x_shift * 64, -y_shift * 64);
+    FT_Outline_Translate(&glyph->outline, -x_shift, -y_shift );
+
+    width /= 64;
+    height /= 64;
 
     SDF_Shape_Init( &shape );
     shape.memory = library->memory;
@@ -161,7 +164,7 @@
     }
 
     Exit:
-    FT_Outline_Translate(&glyph->outline, x_shift * 64, y_shift * 64);
+    FT_Outline_Translate(&glyph->outline, x_shift, y_shift );
     SDF_Shape_Done( &shape );
     return error;
   }
@@ -492,7 +495,6 @@
   {
     FT_Fixed  q              = 0;     /* intermediate      */
     FT_Fixed  r              = 0;     /* intermediate      */
-    FT_Fixed  discriminant   = 0;     /* discriminant      */
 
     FT_Fixed  a2             = b;     /* x^2 coefficients  */
     FT_Fixed  a1             = c;     /* x coefficients    */
@@ -508,19 +510,10 @@
       return solve_quadratic_equation( b, c, d, out );
     }
 
-    if ( a != ( 1 << 6 ) )
-    {
-      /* normalize the coefficients */
-      a2 = FT_DivFix( a2, a );
-      a1 = FT_DivFix( a1, a );
-      a0 = FT_DivFix( a0, a );
-    }
-    else 
-    {
-      a2 *= 1024;
-      a1 *= 1024;
-      a0 *= 1024;
-    }
+    /* normalize the coefficients */
+    a2 = FT_DivFix( a2, a );
+    a1 = FT_DivFix( a1, a );
+    a0 = FT_DivFix( a0, a );
 
     a23 = FT_MulFix( a2, a2 );
     a23 = FT_MulFix( a23, a2 );
@@ -533,9 +526,7 @@
 
     r2 = FT_MulFix( r, r );
 
-    discriminant = q3 + r2;
-
-    if ( discriminant < 0 )
+    if ( q3 < 0 && r2 < -q3 )
     {
       FT_Fixed  t = 0;
 
@@ -550,7 +541,7 @@
 
       return 3;
     }
-    else if ( discriminant == 0 )
+    else if ( r2 == -q3 )
     {
       FT_Fixed  s = 0;
 
@@ -564,13 +555,23 @@
     }
     else
     {
-      FT_Fixed  s = 0;
-      FT_Fixed  t = 0;
+      FT_Fixed  s    = 0;
+      FT_Fixed  t    = 0;
+      FT_Fixed  dis  = 0;
 
 
-      discriminant = square_root( discriminant );
-      s = cube_root( r + discriminant );
-      t = cube_root( r - discriminant );
+      if ( q3 == 0 )
+      {
+        dis = FT_ABS( r );
+      }
+      else
+      {
+        dis = square_root( q3 + r2 );
+      }
+        
+
+      s = cube_root( r + dis );
+      t = cube_root( r - dis );
       a2 /= -3;
       out[0] = a2 + ( s + t );
 
@@ -668,14 +669,8 @@
       
         FT_16D16Vec  norm1    = zero_vector;
         FT_16D16Vec  norm2    = zero_vector;
-      
-        FT_Vector    temp     = zero_vector;
-      
-      
-        temp.x = min_dist.distance_vec.x - dist.distance_vec.x;
-        temp.y = min_dist.distance_vec.y - dist.distance_vec.y;
-      
-        if ( FT_Vector_Length( &temp ) <= epsilon )
+
+        if ( min_dist.distance == dist.distance )
         {
           if ( min_dist.sign != dist.sign  )
           {
@@ -780,13 +775,13 @@
       line_segment.x = b.x - a.x;
       line_segment.y = b.y - a.y;
 
-      line_length = FT_MulFix( line_segment.x * 1024, line_segment.x * 1024 ) +
-                    FT_MulFix( line_segment.y * 1024, line_segment.y * 1024 );
+      line_length = FT_Vector_Length( &line_segment );
+      line_length = ( line_length * line_length ) / 64;
 
-      factor = FT_MulDiv( p_sub_a.x * 1024, line_segment.x * 1024, line_length ) +
-               FT_MulDiv( p_sub_a.y * 1024, line_segment.y * 1024, line_length );
+      factor = ( p_sub_a.x * line_segment.x ) / 64 +
+               ( p_sub_a.y * line_segment.y ) / 64;
 
-      //factor = FT_DivFix( factor, line_length );
+      factor = FT_DivFix( factor, line_length );
 
       /* clamp the factor between 0.0 and 1.0 in fixed point */
       if ( factor > ( 1 << 16 ) )
@@ -938,8 +933,10 @@
           continue;
 
         /* B( t ) = t^2( A ) + 2t( B ) + p0 - p */
-        curve_point.x = FT_MulFix( aA.x * 1024, t2 ) + 2 * FT_MulFix( bB.x * 1024, t ) + p0.x * 1024;
-        curve_point.y = FT_MulFix( aA.y * 1024, t2 ) + 2 * FT_MulFix( bB.y * 1024, t ) + p0.y * 1024;
+        curve_point.x = FT_MulFix( aA.x * 1024, t2 ) +
+                        2 * FT_MulFix( bB.x * 1024, t ) + p0.x * 1024;
+        curve_point.y = FT_MulFix( aA.y * 1024, t2 ) +
+                        2 * FT_MulFix( bB.y * 1024, t ) + p0.y * 1024;
 
         curve_point.x -= p.x * 1024;
         curve_point.y -= p.y * 1024;
@@ -975,6 +972,73 @@
     }
     case SDF_EDGE_TYPE_CUBIC_BEZIER:
     {
+      /* the procedure to find the shortest distance from a point to */
+      /* a cubic bezier curve is simliar to a quadratic curve.       */
+      /* The only difference is that while calculating the factor    */
+      /* `t', instead of a cubic polynomial equation we have to find */
+      /* the roots of a 5th degree polynomial equation.              */
+      /* But since solving a 5th degree polynomial equation require  */
+      /* significant amount of time and still the results may not be */
+      /* accurate, we are going to directly approximate the value of */
+      /* `t' using Newton-Raphson method                             */
+      /*                                                             */
+      /* p0 = first endpoint                                         */
+      /* p1 = first control point                                    */
+      /* p2 = seconf control point                                   */
+      /* p3 = second endpoint                                        */
+      /* p = point from which shortest distance is to be calculated  */
+      /* ----------------------------------------------------------- */
+      /* => the equation of a cubic bezier curve can be written as:  */
+      /*    B( t ) = ( ( 1 - t )^3 )p0 + 3( ( 1 - t )^2 )tp1 +       */
+      /*             3( 1 - t )( t^2 )p2 + ( t^3 )p3                 */
+      /*    The equation can be expanded and written as:             */
+      /*    B( t ) = ( t^3 )( -p0 + 3p1 - 3p2 + p3 ) +               */
+      /*             3( t^2 )( p0 - 2p1 + p2 ) + 3t( -p0 + p1 ) + p0 */
+      /*                                                             */
+      /*    Now let A = ( -p0 + 3p1 - 3p2 + p3 ),                    */
+      /*            B = 3( p0 - 2p1 + p2 ), C = 3( -p0 + p1 )        */
+      /*    B( t ) = t^3( A ) + t^2( B ) + tC + p0                   */
+      /*                                                             */
+      /* => the derivative of the above equation is written as       */
+      /*    B`( t ) = 3t^2( A ) + 2t( B ) + C                        */
+      /*                                                             */
+      /* => further derivative of the above equation is written as   */
+      /*    B``( t ) = 6t( A ) + 2B                                  */
+      /*                                                             */
+      /* => the equation of distance from point `p' to the curve     */
+      /*    P( t ) can be written as                                 */
+      /*    P( t ) = t^3( A ) + t^2( B ) + tC + p0 - p               */
+      /*    Now let D = ( p0 - p )                                   */
+      /*    P( t ) = t^3( A ) + t^2( B ) + tC + D                    */
+      /*                                                             */
+      /* => finally the equation of angle between curve B( t ) and   */
+      /*    point to curve distance P( t ) can be written as         */
+      /*    Q( t ) = P( t ).B`( t )                                  */
+      /*                                                             */
+      /* => now our task is to find a value of t such that the above */
+      /*    equation Q( t ) becomes zero. in other words the point   */
+      /*    to curve vector makes 90 degree with curve. this is done */
+      /*    by Newton-Raphson's method.                              */
+      /*                                                             */
+      /* => we first assume a arbitary value of the factor `t' and   */
+      /*    then we improve it using Newton's equation such as       */
+      /*                                                             */
+      /*    t -= Q( t ) / Q`( t )                                    */
+      /*    putting value of Q( t ) from the above equation gives    */
+      /*                                                             */
+      /*    t -= P( t ).B`( t ) / derivative( P( t ).B`( t ) )       */
+      /*    t -= P( t ).B`( t ) /                                    */
+      /*         ( P`( t )B`( t ) + P( t ).B``( t ) )                */
+      /*                                                             */
+      /*    P`( t ) is noting but B`( t ) because the constant are   */
+      /*    gone due to derivative                                   */
+      /*                                                             */
+      /* => finally we get the equation to improve the factor as     */
+      /*    t -= P( t ).B`( t ) /                                    */
+      /*         ( B`( t ).B`( t ) + P( t ).B``( t ) )               */
+      /*                                                             */
+      /* [note]: B and B( t ) are different in the above equations   */
+
       FT_Vector  aA             = zero_vector;
       FT_Vector  bB             = zero_vector;
       FT_Vector  cC             = zero_vector;
