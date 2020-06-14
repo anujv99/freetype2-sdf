@@ -503,11 +503,19 @@
     FT_Fixed  q3             = 0;
     FT_Fixed  r2             = 0;
     FT_Fixed  a23            = 0;
+    FT_Fixed  a22            = 0;
+    FT_Fixed  a1x2           = 0;
 
-    if ( a == 0 )
+
+    if ( a == 0 || FT_ABS( a ) < 16 )
     {
       /* quadratic equation */
       return solve_quadratic_equation( b, c, d, out );
+    }
+    if ( d == 0 )
+    {
+      out[0] = 0;
+      return solve_quadratic_equation( a, b, c, out + 1 ) + 1;
     }
 
     /* normalize the coefficients */
@@ -515,11 +523,13 @@
     a1 = FT_DivFix( a1, a );
     a0 = FT_DivFix( a0, a );
 
-    a23 = FT_MulFix( a2, a2 );
-    a23 = FT_MulFix( a23, a2 );
+    /* compute intermediates */
+    a1x2 = FT_MulFix( a1, a2 );
+    a22 = FT_MulFix( a2, a2 );
+    a23 = FT_MulFix( a22, a2 );
 
-    q = ( ( 3 * a1 ) - FT_MulFix( a2, a2 ) ) / 9;
-    r = ( ( 9 * FT_MulFix( a1, a2 ) ) - ( 27 * a0 ) - ( 2 * a23 ) ) / 54;
+    q = ( 3 * a1 - a22 ) / 9;
+    r = ( 9 * a1x2 - 27 * a0 - 2 * a23 ) / 54;
 
     q3 = FT_MulFix( q, q );
     q3 = FT_MulFix( q3, q );
@@ -532,7 +542,11 @@
 
 
       q3 = square_root( -q3 );
-      t = arc_cos( FT_DivFix( r, q3 ) );
+      t = FT_DivFix( r, q3 );
+      if ( t >  ( 1 << 16 ) ) t =  ( 1 << 16 );
+      if ( t < -( 1 << 16 ) ) t = -( 1 << 16 );
+
+      t = arc_cos( t );
       a2 /= 3;
       q = 2 * square_root( -q );
       out[0] = FT_MulFix( q, FT_Cos( t / 3 ) ) - a2;
@@ -568,12 +582,11 @@
       {
         dis = square_root( q3 + r2 );
       }
-        
 
       s = cube_root( r + dis );
       t = cube_root( r - dis );
       a2 /= -3;
-      out[0] = a2 + ( s + t );
+      out[0] = ( a2 + ( s + t ) );
 
       return 1;
     }
@@ -667,10 +680,15 @@
         FT_Fixed     ortho1   = 0;
         FT_Fixed     ortho2   = 0;
       
-        FT_16D16Vec  norm1    = zero_vector;
-        FT_16D16Vec  norm2    = zero_vector;
+        FT_Vector    norm1    = zero_vector;
+        FT_Vector    norm2    = zero_vector;
+        FT_Vector    temp     = zero_vector;
 
-        if ( min_dist.distance == dist.distance )
+        temp.x = min_dist.distance_vec.x - dist.distance_vec.x;
+        temp.y = min_dist.distance_vec.y - dist.distance_vec.y;
+
+        if ( min_dist.distance == dist.distance ||
+              FT_Vector_Length( &temp ) <= ( 1 << 10 ) )
         {
           if ( min_dist.sign != dist.sign  )
           {

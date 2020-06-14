@@ -1,3 +1,26 @@
+2020-06-14  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] removed `math.h' from `ext.h' and implemented corresponding
+	functions for fixed point.
+	
+	* ext.h: changed all indentations to directly use fixed point instead
+	  of converting to double and doing computation.
+
+2020-06-13  Anuj Verma  <anujv@iitbhilai.ac.in>
+
+	[sdf-outline] fixed the overflow in the function `solve_cubic_quation'
+	The cause of overflow was the coefficient of x^3 term. While normalizing
+	the coefficient if the coefficient of x^3 is close to ~0, then the rest
+	of the coefficients become very large and cause overflow.
+	
+	* [bug] sdfgen.c (solve_cubic_quation): fixed the overflow by checking 
+	  the coefficient of x^3 term and solving quaddratic in case it is really
+	  small.
+
+	* sdfgen.c (get_min_contour): Apart from checking the `distance' also check
+	  weather the two `distance_vec' point to a same point. If yes then also
+	  check the orthogonality both.
+
 2020-06-12  Anuj Verma  <anujv@iitbhilai.ac.in>
 
 	[sdf-outline] fixed an overflow caused while finding shortest

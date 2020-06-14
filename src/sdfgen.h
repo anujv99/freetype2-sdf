@@ -153,7 +153,7 @@ FT_BEGIN_HEADER
   /* returns the signed distance of a point on the `contour' */
   /* that is nearest to `point'                              */
   FT_LOCAL( FT_Error )
-  get_min_conour( SDF_Contour*          contour,
+  get_min_contour( SDF_Contour*         contour,
                   const FT_26D6Vec      point,
                   SDF_Signed_Distance  *out );
 
