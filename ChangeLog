@@ -3,7 +3,7 @@
 	[sdf-outline] removed `math.h' from `ext.h' and implemented corresponding
 	functions for fixed point.
 	
-	* ext.h: changed all indentations to directly use fixed point instead
+	* ext.h: changed all implementations to directly use fixed point instead
 	  of converting to double and doing computation.
 
 2020-06-13  Anuj Verma  <anujv@iitbhilai.ac.in>
