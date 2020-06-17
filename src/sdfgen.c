@@ -1000,14 +1000,14 @@
       /*    B( t ) = t^2( A ) + 2t( B ) + p0                         */
       /*                                                             */
       /* => the derivative of the above equation is written as       */
-      /*    B`( t ) = 2( tA + B )                                    */
+      /*    B'( t ) = 2( tA + B )                                    */
       /*                                                             */
       /* => now to find the shortest distance from p to B( t ), we   */
       /*    find the point on the curve at which the shortest        */
       /*    distance vector ( i.e. B( t ) - p ) and the direction    */
-      /*    ( i.e. B`( t )) makes 90 degrees. in other words we make */
+      /*    ( i.e. B'( t )) makes 90 degrees. in other words we make */
       /*    the dot product zero.                                    */
-      /*    ( B( t ) - p ).( B`( t ) ) = 0                           */
+      /*    ( B( t ) - p ).( B'( t ) ) = 0                           */
       /*    ( t^2( A ) + 2t( B ) + p0 - p ).( 2( tA + B ) ) = 0      */
       /*                                                             */
       /*    after simplifying we get a cubic equation as             */
@@ -1106,7 +1106,7 @@
       out->nearest_point = nearest_point;
       
       /* calculate direction of shortest point on the curve using  */
-      /* B`( t ) = 2( tA + B )                                     */
+      /* B'( t ) = 2( tA + B )                                     */
       temp = sdf_vector_scale( aA, np_factor );
       temp = sdf_vector_add( temp, bB );
       temp = sdf_vector_scale( temp, 2.0f );
@@ -1144,10 +1144,10 @@
       /*    B( t ) = t^3( A ) + t^2( B ) + tC + p0                   */
       /*                                                             */
       /* => the derivative of the above equation is written as       */
-      /*    B`( t ) = 3t^2( A ) + 2t( B ) + C                        */
+      /*    B'( t ) = 3t^2( A ) + 2t( B ) + C                        */
       /*                                                             */
       /* => further derivative of the above equation is written as   */
-      /*    B``( t ) = 6t( A ) + 2B                                  */
+      /*    B''( t ) = 6t( A ) + 2B                                  */
       /*                                                             */
       /* => the equation of distance from point `p' to the curve     */
       /*    P( t ) can be written as                                 */
@@ -1157,7 +1157,7 @@
       /*                                                             */
       /* => finally the equation of angle between curve B( t ) and   */
       /*    point to curve distance P( t ) can be written as         */
-      /*    Q( t ) = P( t ).B`( t )                                  */
+      /*    Q( t ) = P( t ).B'( t )                                  */
       /*                                                             */
       /* => now our task is to find a value of t such that the above */
       /*    equation Q( t ) becomes zero. in other words the point   */
@@ -1167,19 +1167,19 @@
       /* => we first assume a arbitary value of the factor `t' and   */
       /*    then we improve it using Newton's equation such as       */
       /*                                                             */
-      /*    t -= Q( t ) / Q`( t )                                    */
+      /*    t -= Q( t ) / Q'( t )                                    */
       /*    putting value of Q( t ) from the above equation gives    */
       /*                                                             */
-      /*    t -= P( t ).B`( t ) / derivative( P( t ).B`( t ) )       */
-      /*    t -= P( t ).B`( t ) /                                    */
-      /*         ( P`( t )B`( t ) + P( t ).B``( t ) )                */
+      /*    t -= P( t ).B'( t ) / derivative( P( t ).B'( t ) )       */
+      /*    t -= P( t ).B'( t ) /                                    */
+      /*         ( P'( t )B'( t ) + P( t ).B''( t ) )                */
       /*                                                             */
-      /*    P`( t ) is noting but B`( t ) because the constant are   */
+      /*    P'( t ) is noting but B'( t ) because the constant are   */
       /*    gone due to derivative                                   */
       /*                                                             */
       /* => finally we get the equation to improve the factor as     */
-      /*    t -= P( t ).B`( t ) /                                    */
-      /*         ( B`( t ).B`( t ) + P( t ).B``( t ) )               */
+      /*    t -= P( t ).B'( t ) /                                    */
+      /*         ( B'( t ).B'( t ) + P( t ).B''( t ) )               */
       /*                                                             */
       /* [note]: B and B( t ) are different in the above equations   */
 
@@ -1256,20 +1256,20 @@
             nearest_point = sdf_vector_add( point_to_curve, p );
           }
 
-          /* calculate B`( t ) = 3t^2( A ) + 2t( B ) + C  */
+          /* calculate B'( t ) = 3t^2( A ) + 2t( B ) + C  */
           d1 = sdf_vector_scale( aA, 3.0f * factor2 );
           temp = sdf_vector_scale( bB, 2.0f * factor );
           d1 = sdf_vector_add( d1, temp );
           d1 = sdf_vector_add( d1, cC );
 
-          /* calculate B``( t ) = 6t( A ) + 2B  */
+          /* calculate B''( t ) = 6t( A ) + 2B  */
           d2 = sdf_vector_scale( aA, 3.0f * factor );
           d2 = sdf_vector_add( d2, bB );
           d2 = sdf_vector_scale( d2, 2.0f );
 
           /* improve factor using                          */
-          /*    t -= P( t ).B`( t ) /                      */
-          /*         ( B`( t ).B`( t ) + P( t ).B``( t ) ) */
+          /*    t -= P( t ).B'( t ) /                      */
+          /*         ( B'( t ).B'( t ) + P( t ).B''( t ) ) */
           factor -=   sdf_vector_dot( point_to_curve, d1 ) /
                     ( sdf_vector_dot( d1, d1 ) +
                       sdf_vector_dot( point_to_curve, d2 ) );
@@ -1284,7 +1284,7 @@
       out->nearest_point = nearest_point;
 
       /* calculate direction of shortest point on the curve using  */
-      /* B`( t ) = 3t^2( A ) + 2t( B ) + C                         */
+      /* B'( t ) = 3t^2( A ) + 2t( B ) + C                         */
       out->direction = sdf_vector_scale( aA, 
                                          3.0f * min_factor * min_factor );
       temp = sdf_vector_scale( bB, 2 * min_factor );
